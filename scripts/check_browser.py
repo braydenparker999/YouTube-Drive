@@ -21,6 +21,19 @@ async def main():
         print(json.dumps({'browser_start': True}), flush=True)
     except Exception as exc:
         print(json.dumps({'browser_start': False, 'error': str(exc)[:2000]}), flush=True)
+        await asyncio.sleep(8)
+        for instance in nodriver.core.util.get_registered_instances():
+            process = instance._process
+            if process and process.returncode is not None:
+                stderr = await process.stderr.read()
+                print(json.dumps({'browser_exit': process.returncode, 'startup_error': stderr.decode(errors='replace')[:5000]}), flush=True)
+            elif process:
+                try:
+                    version = await instance._http.get('version')
+                    print(json.dumps({'browser_ready_after_grace_period': bool(version)}), flush=True)
+                except Exception:
+                    print(json.dumps({'browser_ready_after_grace_period': False}), flush=True)
+                instance.stop()
         raise SystemExit(1) from None
     finally:
         if browser:

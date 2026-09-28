@@ -1,1 +1,1 @@
-{"attempt": 5, "hypothesis": "Select installed Google Chrome explicitly; autodetected /bin/chromium has no usable sandbox on this runner. Keep sandbox enabled."}
+{"attempt": 6, "hypothesis": "Compare bgutil mweb player-token configuration through an anonymous WARP local proxy; diagnose browser startup separately."}
