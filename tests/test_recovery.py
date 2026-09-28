@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.common import ArchiveError, Inputs, StateError
-from src.main import discover_queue, process_video, run_queue
+from src.main import discover_queue, prepare_manual, process_video, run_queue
 from src.state import State
 
 VID = 'BaW_jenozKc'
@@ -158,3 +158,24 @@ class RecoveryTests(unittest.TestCase):
         record = self.state.data['videos'][VID]
         self.assertEqual(record['md5'], hashlib.md5(b'test media bytes').hexdigest())
         self.assertTrue(record['completed_at'])
+
+
+class ManualQueueTests(unittest.TestCase):
+    @patch('src.main.time.sleep')
+    def test_batch_is_persistent_before_downloading(self, sleep):
+        state, down = State(), FakeDownloader()
+        summary = {'videos': []}
+        ready = prepare_manual(state, down, [new_item(), new_item(OTHER)], summary)
+        self.assertEqual(len(ready), 2)
+        self.assertEqual(down.downloads, 0)
+        self.assertEqual(set(state.data['videos']), {VID, OTHER})
+
+    @patch('src.main.time.sleep')
+    def test_unverified_failure_is_not_persisted_and_next_request_survives(self, sleep):
+        state, down = State(), FakeDownloader()
+        down.fail.add(VID)
+        summary = {'videos': []}
+        ready = prepare_manual(state, down, [new_item(), new_item(OTHER)], summary)
+        self.assertEqual([v['video_id'] for v in ready], [OTHER])
+        self.assertEqual(summary['videos'][0]['status'], 'failed')
+        self.assertNotIn(VID, state.data['videos'])

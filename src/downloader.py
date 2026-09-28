@@ -6,6 +6,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,8 @@ def classify_error(text):
              ("407", "Egress proxy authentication failed (HTTP 407)."),
              ("sign in", "YouTube requires sign-in or blocked this runner IP; no cookies configured."),
              ("not available", "Video/format unavailable in this region or at this time."),
+             ("unavailable", "Video is unavailable; verify the URL still names a public video."),
+             ("removed", "Video has been removed; verify the URL."),
              ("private", "Private video cannot be archived by this public-metadata system."),
              ("requested format", "No format matches the selected maximum quality."),
              ("javascript", "YouTube JavaScript extraction failed; check Deno and yt-dlp-ejs versions."),
@@ -50,6 +53,7 @@ class Downloader:
     def __init__(self, settings, workdir, env=None):
         self.settings, self.workdir = settings, Path(workdir)
         self.env = env if env is not None else os.environ
+        self.metadata_cache = {}
         self.version = self.run(["--version"], timeout=30).strip()
         log("DOWNLOAD", yt_dlp_version=self.version)
 
@@ -88,6 +92,9 @@ class Downloader:
         return opts
 
     def metadata(self, vid, height):
+        cached = getattr(self, "metadata_cache", {}).get((vid, height))
+        if cached and time.monotonic() - cached[0] < 600:
+            return cached[1]
         raw = self.run(self.options(height) + ["--skip-download", "--dump-single-json",
                                               "--", "https://www.youtube.com/watch?v=" + vid], timeout=240)
         try:
@@ -103,6 +110,7 @@ class Downloader:
         duration = info.get("duration")
         if not isinstance(duration, (int, float)) or duration <= 0 or duration > self.settings["max_duration_seconds"]:
             raise ArchiveError("Video duration is unknown or exceeds configured max_duration_seconds.")
+        self.metadata_cache[(vid, height)] = (time.monotonic(), info)
         return info
 
     @staticmethod

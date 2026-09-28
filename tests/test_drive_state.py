@@ -149,3 +149,13 @@ class StateTests(unittest.TestCase):
         state.data['root_fingerprint'] = 'ours'
         with self.assertRaisesRegex(StateError, 'Concurrent'):
             state.save()
+
+
+class LargeStateTests(unittest.TestCase):
+    @patch('src.state.raw_http')
+    def test_large_state_reads_immutable_blob(self, http):
+        obj = {'sha': 'large-state-sha', 'encoding': 'none', 'content': ''}
+        http.side_effect = [(200, {}, json.dumps(obj).encode()), (200, {}, json.dumps(empty_state()).encode())]
+        state = GitHubState('owner/repo', 'main', 'unit-test')
+        self.assertEqual(state.data, empty_state())
+        self.assertTrue(http.call_args_list[1].args[1].endswith('/git/blobs/large-state-sha'))

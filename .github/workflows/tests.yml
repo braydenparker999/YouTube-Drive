@@ -49,5 +49,5 @@ jobs:
           python -m pip install -r requirements.txt
           npm install --global deno@2.9.6
           python scripts/install_ytdlp.py
-      - name: Metadata only (yt-dlp public test video; no media downloaded)
-        run: python -m src.main --metadata-only https://www.youtube.com/watch?v=BaW_jenozKc
+      - name: Metadata only (public video metadata; no media downloaded)
+        run: python -m src.main --metadata-only https://www.youtube.com/watch?v=jNQXAC9IVRw

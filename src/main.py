@@ -104,8 +104,29 @@ def process_video(state, drive, downloader, item, workdir):
     return {"video_id": vid, "status": "complete", "drive_file_id": item["drive_file_id"]}
 
 
-def run_queue(state, drive, downloader, queue, settings, summary, workdir, checkpoint=lambda: None):
-    start = time.monotonic()
+def prepare_manual(state, downloader, queue, summary, checkpoint=lambda: None):
+    """Durably queue confirmed public requests before spending the run on media."""
+    ready = []
+    for item in queue:
+        vid = item["video_id"]
+        if vid not in state.data["videos"]:
+            try:
+                info = downloader.metadata(vid, item["max_quality"])
+                state.add({**item, **downloader.public_fields(info)})
+                state.save()
+            except StateError:
+                raise
+            except ArchiveError as exc:
+                summary["videos"].append({"video_id": vid, "status": "failed", "error": str(exc)})
+                checkpoint()
+                continue
+            time.sleep(5)
+        ready.append(state.data["videos"][vid])
+    return ready
+
+
+def run_queue(state, drive, downloader, queue, settings, summary, workdir, checkpoint=lambda: None, started_at=None):
+    start = time.monotonic() if started_at is None else started_at
     handled = 0
     for item in queue:
         vid = item["video_id"]
@@ -151,6 +172,7 @@ def main(argv=None, env=None):
     summary = {"request_id": "", "status": "running", "videos": [], "discovery_errors": []}
     code = 0
     write_summary = True
+    started_at = time.monotonic()
     try:
         inputs = parse_inputs(env)
         summary["request_id"] = inputs.request_id
@@ -175,7 +197,11 @@ def main(argv=None, env=None):
         if queue:
             Path(".work").mkdir(exist_ok=True)
             downloader = Downloader(config["settings"], ".work", env)
-            run_queue(state, drive, downloader, queue, config["settings"], summary, ".work", lambda: finish_summary(summary))
+            def checkpoint():
+                finish_summary(summary)
+            if inputs.ids:
+                queue = prepare_manual(state, downloader, queue, summary, checkpoint)
+            run_queue(state, drive, downloader, queue, config["settings"], summary, ".work", checkpoint, started_at)
         else:
             log("DISCOVERY", queued=0, message="No pending videos; add enabled creators or supply manual URLs.")
     except SetupError as exc:
