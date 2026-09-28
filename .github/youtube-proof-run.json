@@ -1,1 +1,1 @@
-{"attempt": 2, "hypothesis": "Use the documented browser-based token provider instead of bgutil; keep mweb, runtime and video fixed."}
+{"attempt": 3, "hypothesis": "Allow browser provider to run: it rejects force-ipv4/source-address according to its capability declaration."}

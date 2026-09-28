@@ -23,9 +23,9 @@ def child_env():
 
 def classify_error(text):
     lowered = text.lower()
-    cases = [("429", "YouTube HTTP 429: rate limited; leave pacing enabled and retry a later run."),
-             ("403", "YouTube HTTP 403: extraction/egress rejected; see README PO-token guidance."),
-             ("407", "Egress proxy authentication failed (HTTP 407)."),
+    cases = [("http error 429", "YouTube HTTP 429: rate limited; leave pacing enabled and retry a later run."),
+             ("http error 403", "YouTube HTTP 403: extraction/egress rejected; see README PO-token guidance."),
+             ("http error 407", "Egress proxy authentication failed (HTTP 407)."),
              ("sign in", "YouTube requires sign-in or blocked this runner IP; no cookies configured."),
              ("not available", "Video/format unavailable in this region or at this time."),
              ("unavailable", "Video is unavailable; verify the URL still names a public video."),
@@ -65,6 +65,11 @@ def diagnostic_events(stderr):
             ('Minting player PO Token', 'browser_player_token_requested'),
             ('Retrieved player PO Token:', 'browser_player_token_generated'),
             ('Waiting for WebPoClient', 'browser_token_wait'),
+            ('do not support setting source address', 'provider_source_address_unsupported'),
+            ('failed to start browser', 'browser_start_failed'),
+            ('Launching youtube.com in browser', 'browser_start'),
+            ('Could not find WebPoClient', 'browser_token_client_missing'),
+            ('bg_st_hr experiment is not enabled', 'browser_token_experiment_missing'),
             ('Sign in to confirm', 'sign_in_challenge'),
             ('not a bot', 'bot_check'),
             ('Error reaching POST /get_pot', 'token_provider_error'),
@@ -110,7 +115,7 @@ class Downloader:
 
     def options(self, height):
         opts = ["--ignore-config", "--no-playlist", "--no-progress", "--no-colors", "--no-warnings",
-                "--no-overwrites", "--continue", "--force-ipv4", "--concurrent-fragments", "1",
+                "--no-overwrites", "--continue", "--concurrent-fragments", "1",
                 "--retries", "3", "--fragment-retries", "3", "--extractor-retries", "2",
                 "--socket-timeout", "30", "--retry-sleep", "http:exp=2:20", "--retry-sleep", "fragment:exp=2:20",
                 "--sleep-requests", "1", "--sleep-interval", "5", "--max-sleep-interval", "10",
@@ -118,6 +123,8 @@ class Downloader:
                 "--max-filesize", str(self.settings["max_file_gib"] * 1024**3),
                 "--format", f"bv*[height<={height}]+ba/b[height<={height}]",
                 "--merge-output-format", "mp4/mkv", "--js-runtimes", "deno"]
+        if self.env.get("YTDLP_IP_FAMILY", "4") != "auto":
+            opts += ["--force-ipv4"]
         # Trusted maintainer secret only; never supplied through workflow_dispatch.
         # This one extension point can enable mweb + an installed PO-token provider.
         if self.env.get("YTDLP_EXTRACTOR_ARGS"):

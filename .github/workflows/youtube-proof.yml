@@ -33,6 +33,7 @@ jobs:
         run: python -m pip install yt-dlp-getpot-wpc==1.1.2
       - name: Download and fully decode one short public video
         env:
+          YTDLP_IP_FAMILY: auto # WPC cannot accept a forced source address.
           YTDLP_EXTRACTOR_ARGS: 'youtube:player_client=mweb;fetch_pot=always;pot_trace=true'
         run: xvfb-run -a python -m scripts.youtube_proof
       - name: Publish sanitized evidence only
