@@ -2,7 +2,7 @@
 
 ## Outcome
 
-**The YouTube download gate passed on three fresh GitHub-hosted Ubuntu runners.** Each downloaded the complete public test video's audio and video through Cloudflare WARP, merged them, checked duration/streams, and decoded the entire file with ffmpeg. No signed-in YouTube account, account cookies, paid proxy, or Google Drive authorization was used.
+**The YouTube download gate passed on three fresh GitHub-hosted Ubuntu runners, followed by a fourth successful run through the final shared installer.** Each downloaded the complete public test video's audio and video through Cloudflare WARP, merged them, checked duration/streams, and decoded the entire file with ffmpeg. No signed-in YouTube account, account cookies, paid proxy, or Google Drive authorization was used.
 
 **The complete YouTube → Drive archive is not yet end-to-end verified:** Google OAuth/root secrets are still missing. Unit and simulated recovery tests are separate evidence from the real download proof.
 
@@ -55,6 +55,8 @@ The local suite contains **47 tests**: 46 safe/unit tests plus the opt-in real l
 | 3 | [109138966721](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484792964/job/109138966721) | Complete, fully decoded | 474,599 bytes; 19.028 seconds; video + audio |
 
 Fixture: `jNQXAC9IVRw` (Me at the zoo), 320×240 source. Runtime: yt-dlp nightly `2026.09.27.232945`, Deno 2.9.6, matching EJS, ffmpeg/ffprobe 6.1.1, bgutil 2.0.0, WARP client 2026.7.1377.0. `mweb;fetch_pot=always`, IPv4, one fragment at a time, paced requests. Both yt-dlp and the token provider used the same loopback WARP proxy; its active tunnel was verified before contacting YouTube.
+
+After consolidating setup into `scripts/setup_youtube_runtime.sh`, [run 36485713460, job 109141991910](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36485713460/job/109141991910) independently passed the same full download/decode check on another fresh runner. This directly exercised the installer now used by both final workflows. Its safe unit/lint/startup job also passed. The one-time push-triggered acceptance job was removed afterward; the retained network proof is manual-only.
 
 The proof records each file's SHA-256, duration, byte size and streams. Container hashes can differ because muxing metadata changes between runs. No media, tokens, signed media URLs, browser profiles, device keys, or raw yt-dlp metadata were published as artifacts or committed. The test does not write completion records to archive state.
 
