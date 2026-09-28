@@ -49,10 +49,39 @@ def classify_error(text):
     return "yt-dlp extraction/download failed; inspect version, public availability, runtime and egress; see README."
 
 
+def diagnostic_events(stderr):
+    """Allowlisted observations only: never emit raw debug output or token values."""
+    events = []
+    for line in stderr.splitlines():
+        match = re.search(r'\b(mweb|web|web_safari|android_vr|web_embedded|tv|ios):? player response playability status: (LOGIN_REQUIRED|UNPLAYABLE|ERROR|OK)\b', line)
+        if match:
+            events.append({'event': 'player_response', 'client': match[1], 'status': match[2]})
+        for marker, event in [
+            ('Downloading webpage', 'webpage_request'),
+            ('Downloading mweb player API JSON', 'mweb_player_request'),
+            ('Generating a player PO Token', 'player_token_requested'),
+            ('Generating a gvs PO Token', 'gvs_token_requested'),
+            ('Generated POT:', 'token_generated'),
+            ('Sign in to confirm', 'sign_in_challenge'),
+            ('not a bot', 'bot_check'),
+            ('Error reaching POST /get_pot', 'token_provider_error'),
+            ('Failed to extract initial attestation', 'webpage_attestation_missing'),
+            ('Solving JS challenges', 'js_challenge'),
+        ]:
+            if marker in line:
+                events.append({'event': event})
+        if 'PO Token Providers:' in line:
+            events.append({'event': 'provider_registry', 'bgutil_http': 'bgutil:http' in line})
+        if 'JS runtimes:' in line:
+            events.append({'event': 'runtime_registry', 'deno': 'deno-' in line})
+    return events
+
+
 class Downloader:
-    def __init__(self, settings, workdir, env=None):
+    def __init__(self, settings, workdir, env=None, diagnostics=False):
         self.settings, self.workdir = settings, Path(workdir)
         self.env = env if env is not None else os.environ
+        self.diagnostics = diagnostics
         self.metadata_cache = {}
         self.version = self.run(["--version"], timeout=30).strip()
         log("DOWNLOAD", yt_dlp_version=self.version)
@@ -69,6 +98,9 @@ class Downloader:
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.communicate()
+        if getattr(self, 'diagnostics', False):
+            for event in diagnostic_events(stderr):
+                log('DIAGNOSTIC', **event)
         if process.returncode:
             raise ArchiveError(classify_error(stderr))
         return stdout
@@ -89,6 +121,9 @@ class Downloader:
             opts += ["--extractor-args", self.env["YTDLP_EXTRACTOR_ARGS"]]
         if self.env.get("YTDLP_PROXY"):
             opts += ["--proxy", self.env["YTDLP_PROXY"]]
+        if getattr(self, 'diagnostics', False):
+            opts.remove('--no-warnings')
+            opts += ['--verbose']
         return opts
 
     def metadata(self, vid, height):

@@ -17,3 +17,4 @@ rclone.conf
 *.mp4
 *.mkv
 *.webm
+youtube-proof.json
