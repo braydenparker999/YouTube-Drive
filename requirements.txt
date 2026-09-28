@@ -1,0 +1,3 @@
+PyYAML==6.0.3
+# yt-dlp[default] is installed separately with --pre --upgrade once per workflow.
+# This brings in its matching yt-dlp-ejs challenge scripts.

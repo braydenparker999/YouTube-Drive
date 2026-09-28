@@ -1,0 +1,18 @@
+# Add only creators/videos you are authorized to archive.
+# An enabled creator's first run queues the latest ~15 uploads, oldest first.
+# Use the stable UC... ID from YouTube channel settings/page source.
+channels: []
+# Example (replace the placeholder before enabling):
+# channels:
+#   - name: Example Creator
+#     channel_id: UC_REPLACE_WITH_REAL_CHANNEL_ID
+#     drive_folder: Example Creator
+#     enabled: true
+#     drive_folder_id: OPTIONAL_EXISTING_FOLDER_ID
+
+settings:
+  max_quality: 1080
+  max_videos_per_run: 25
+  max_file_gib: 4
+  max_duration_seconds: 7200
+  run_budget_minutes: 210
