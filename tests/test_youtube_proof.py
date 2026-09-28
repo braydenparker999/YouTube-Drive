@@ -54,3 +54,13 @@ class DiagnosticTests(unittest.TestCase):
         self.assertNotIn('--force-ipv4', downloader.options(360))
         downloader.env = {}
         self.assertIn('--force-ipv4', downloader.options(360))
+
+    def test_missing_ffmpeg_fails_before_download(self):
+        from unittest.mock import patch
+
+        from src.common import ArchiveError
+        from src.downloader import Downloader
+        downloader = object.__new__(Downloader)
+        with patch('src.downloader.shutil.which', return_value=None):
+            with self.assertRaisesRegex(ArchiveError, 'Missing media tools'):
+                downloader.download('jNQXAC9IVRw', 360, {}, '.')

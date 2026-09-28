@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 from src.common import ArchiveError, log
-from src.downloader import Downloader, child_env
+from src.downloader import Downloader, child_env, require_media_tools
 
 VIDEO_ID = 'jNQXAC9IVRw'  # 19-second public test fixture; never crawl a channel.
 
@@ -39,6 +39,7 @@ def main():
     report = {'video_id': VIDEO_ID, 'status': 'failed', 'stage': 'initialization',
               'commit': os.environ.get('GITHUB_SHA', ''), 'run_id': os.environ.get('GITHUB_RUN_ID', '')}
     try:
+        report['media_tools'] = require_media_tools()
         with tempfile.TemporaryDirectory(prefix='youtube-proof-') as tmp:
             downloader = Downloader({'max_file_gib': 0.125, 'max_duration_seconds': 120}, tmp, diagnostics=True)
             report['yt_dlp_version'] = downloader.version

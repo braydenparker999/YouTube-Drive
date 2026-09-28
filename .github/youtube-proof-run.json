@@ -1,1 +1,1 @@
-{"attempt": 8, "hypothesis": "WARP extracted formats successfully; inspect media outputs and merging before changing downloader behavior."}
+{"attempt": 9, "hypothesis": "Three fresh runners: explicitly install and preflight ffmpeg, then download, merge, and fully decode through the successful WARP route."}

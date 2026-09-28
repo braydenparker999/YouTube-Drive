@@ -21,6 +21,20 @@ def child_env():
     return {k: v for k, v in os.environ.items() if k in allowed}
 
 
+def require_media_tools():
+    versions = {}
+    for tool in ('ffmpeg', 'ffprobe'):
+        if not shutil.which(tool):
+            raise ArchiveError('Missing media tools: install ffmpeg and ffprobe before downloading.')
+        try:
+            result = subprocess.run([tool, '-version'], capture_output=True, text=True,
+                                    check=True, timeout=10, env=child_env())
+            versions[tool] = result.stdout.splitlines()[0][:200]
+        except (OSError, subprocess.SubprocessError, IndexError):
+            raise ArchiveError('ffmpeg/ffprobe startup failed; check the media runtime installation.') from None
+    return versions
+
+
 def classify_error(text):
     lowered = text.lower()
     cases = [("http error 429", "YouTube HTTP 429: rate limited; leave pacing enabled and retry a later run."),
@@ -120,7 +134,7 @@ class Downloader:
 
     def options(self, height):
         opts = ["--ignore-config", "--no-playlist", "--no-progress", "--no-colors", "--no-warnings",
-                "--no-overwrites", "--continue", "--concurrent-fragments", "1",
+                "--no-overwrites", "--continue", "--abort-on-error", "--concurrent-fragments", "1",
                 "--retries", "3", "--fragment-retries", "3", "--extractor-retries", "2",
                 "--socket-timeout", "30", "--retry-sleep", "http:exp=2:20", "--retry-sleep", "fragment:exp=2:20",
                 "--sleep-requests", "1", "--sleep-interval", "5", "--max-sleep-interval", "10",
@@ -176,6 +190,7 @@ class Downloader:
                 "published_at": published}
 
     def download(self, vid, height, info, directory):
+        require_media_tools()
         directory = Path(directory).resolve()
         limit = self.settings["max_file_gib"] * 1024**3
         if shutil.disk_usage(directory).free < limit * 2 + 512 * 1024**2:
