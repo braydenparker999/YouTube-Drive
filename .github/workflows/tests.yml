@@ -49,5 +49,9 @@ jobs:
           python -m pip install -r requirements.txt
           npm install --global deno@2.9.6
           python scripts/install_ytdlp.py
+      - name: Start documented PO-token provider after default-client rejection
+        run: python scripts/setup_po_provider.py
       - name: Metadata only (public video metadata; no media downloaded)
+        env:
+          YTDLP_EXTRACTOR_ARGS: youtube:player_client=mweb
         run: python -m src.main --metadata-only https://www.youtube.com/watch?v=jNQXAC9IVRw
