@@ -58,6 +58,11 @@ def diagnostic_events(stderr):
             events.append({'event': 'player_response', 'client': match[1], 'status': match[2]})
         for marker, event in [
             ('Downloading webpage', 'webpage_request'),
+            ('[Merger] Merging formats', 'merge_started'),
+            ('File is larger than max-filesize', 'size_limit_skip'),
+            ('has already been downloaded', 'existing_local_file'),
+            ('[download] Destination:', 'media_destination'),
+            ('[download] 100%', 'media_transfer_finished'),
             ('Downloading mweb player API JSON', 'mweb_player_request'),
             ('Generating a player PO Token', 'player_token_requested'),
             ('Generating a gvs PO Token', 'gvs_token_requested'),
@@ -107,7 +112,7 @@ class Downloader:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.communicate()
         if getattr(self, 'diagnostics', False):
-            for event in diagnostic_events(stderr):
+            for event in diagnostic_events(stderr + ('\n' + stdout if '--dump-single-json' not in args else '')):
                 log('DIAGNOSTIC', **event)
         if process.returncode:
             raise ArchiveError(classify_error(stderr))
@@ -184,6 +189,10 @@ class Downloader:
         finally:
             meta.unlink(missing_ok=True)
         files = [p for p in directory.iterdir() if p.name in {"media.mp4", "media.mkv", "media.webm"}]
+        if getattr(self, 'diagnostics', False):
+            log('DIAGNOSTIC', event='local_outputs', files=[
+                {'name': p.name if p.name.startswith('media.') else '[other]', 'bytes': p.stat().st_size}
+                for p in directory.iterdir() if p.is_file()])
         if len(files) != 1 or not 0 < files[0].stat().st_size <= limit:
             raise ArchiveError("Download is incomplete, ambiguous, or exceeds the configured size limit.")
         try:
