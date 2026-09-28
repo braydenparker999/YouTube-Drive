@@ -1,1 +1,1 @@
-{"attempt": 4, "hypothesis": "Diagnose Chrome startup offline; do not contact YouTube unless the browser preflight succeeds."}
+{"attempt": 5, "hypothesis": "Select installed Google Chrome explicitly; autodetected /bin/chromium has no usable sandbox on this runner. Keep sandbox enabled."}

@@ -129,6 +129,8 @@ class Downloader:
         # This one extension point can enable mweb + an installed PO-token provider.
         if self.env.get("YTDLP_EXTRACTOR_ARGS"):
             opts += ["--extractor-args", self.env["YTDLP_EXTRACTOR_ARGS"]]
+        if self.env.get("YTDLP_BROWSER_PATH"):
+            opts += ["--extractor-args", "youtubepot-wpc:browser_path=" + self.env["YTDLP_BROWSER_PATH"]]
         if self.env.get("YTDLP_PROXY"):
             opts += ["--proxy", self.env["YTDLP_PROXY"]]
         if getattr(self, 'diagnostics', False):

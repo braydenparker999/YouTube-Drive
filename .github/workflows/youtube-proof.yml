@@ -35,6 +35,7 @@ jobs:
         run: xvfb-run -a python -m scripts.check_browser
       - name: Download and fully decode one short public video
         env:
+          YTDLP_BROWSER_PATH: /usr/bin/google-chrome
           YTDLP_IP_FAMILY: auto # WPC cannot accept a forced source address.
           YTDLP_EXTRACTOR_ARGS: 'youtube:player_client=mweb;fetch_pot=always;pot_trace=true'
         run: xvfb-run -a python -m scripts.youtube_proof

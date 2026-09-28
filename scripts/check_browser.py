@@ -9,7 +9,7 @@ from nodriver.core.config import Config
 
 
 async def main():
-    config = Config(headless=False)
+    config = Config(headless=False, browser_executable_path=shutil.which('google-chrome'))
     print(json.dumps({'browser': config.browser_executable_path, 'chrome': shutil.which('google-chrome')}), flush=True)
     # Blank-page stderr can diagnose runtime/sandbox failures without visiting a service.
     result = subprocess.run([config.browser_executable_path, '--headless', '--dump-dom', 'about:blank'],
