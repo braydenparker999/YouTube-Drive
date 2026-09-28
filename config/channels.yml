@@ -16,3 +16,4 @@ settings:
   max_file_gib: 4
   max_duration_seconds: 7200
   run_budget_minutes: 210
+  max_attempts: 5

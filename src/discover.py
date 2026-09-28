@@ -28,13 +28,13 @@ def load_config(path):
             raise ValueError
         options = config.get("settings", {})
         defaults = {"max_quality": 1080, "max_videos_per_run": 25, "max_file_gib": 4,
-                    "max_duration_seconds": 7200, "run_budget_minutes": 210}
+                    "max_duration_seconds": 7200, "run_budget_minutes": 210, "max_attempts": 5}
         if not isinstance(options, dict) or set(options) - set(defaults):
             raise ValueError
         defaults.update(options)
         quality(defaults["max_quality"])
         for key, maximum in [("max_videos_per_run", 100), ("max_file_gib", 8),
-                             ("max_duration_seconds", 14400), ("run_budget_minutes", 210)]:
+                             ("max_duration_seconds", 14400), ("run_budget_minutes", 210), ("max_attempts", 50)]:
             if type(defaults[key]) is not int or not 1 <= defaults[key] <= maximum:
                 raise ValueError
         seen = set()

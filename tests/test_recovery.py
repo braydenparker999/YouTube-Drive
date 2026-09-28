@@ -179,3 +179,24 @@ class ManualQueueTests(unittest.TestCase):
         self.assertEqual([v['video_id'] for v in ready], [OTHER])
         self.assertEqual(summary['videos'][0]['status'], 'failed')
         self.assertNotIn(VID, state.data['videos'])
+
+
+class RetryBudgetTests(unittest.TestCase):
+    @patch('src.main.time.sleep')
+    def test_metadata_failure_increments_attempt_count(self, sleep):
+        state, down = State(), FakeDownloader()
+        state.add(new_item())
+        down.fail.add(VID)
+        with tempfile.TemporaryDirectory() as tmp:
+            run_queue(state, FakeDrive(), down, [state.data['videos'][VID]], SETTINGS, {'videos': []}, tmp)
+        self.assertEqual(state.data['videos'][VID]['attempts'], 1)
+
+    def test_exhausted_record_pauses_daily_but_manual_can_retry(self):
+        state = State()
+        state.add(new_item())
+        state.update(VID, status='failed', attempts=5)
+        config = {'settings': {**SETTINGS, 'max_attempts': 5}, 'channels': []}
+        daily, _ = discover_queue(state, config, Inputs([], 'Requested', 1080, ''))
+        manual, _ = discover_queue(state, config, Inputs([VID], 'Requested', 1080, ''))
+        self.assertEqual(daily, [])
+        self.assertEqual([v['video_id'] for v in manual], [VID])

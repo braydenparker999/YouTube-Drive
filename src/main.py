@@ -59,7 +59,12 @@ def discover_queue(state, config, inputs, feed=discover):
             errors.append({"channel_id": ch["channel_id"], "error": str(exc)})
             log("DISCOVERY", creator=ch["name"], error=str(exc))
     queue = [v for v in state.data["videos"].values() if v["status"] != "complete" and
+             v.get("attempts", 0) < config["settings"].get("max_attempts", 5) and
              (v.get("source") == "manual" or v.get("channel_id") in enabled)]
+    paused = sum(v["status"] != "complete" and v.get("attempts", 0) >= config["settings"].get("max_attempts", 5)
+                 for v in state.data["videos"].values())
+    if paused:
+        log("DISCOVERY", paused_after_failed_attempts=paused, message="Fix the cause and resubmit URLs to retry paused videos.")
     # First attempts before repeatedly failing records, then oldest first.
     queue.sort(key=lambda v: (v.get("attempts", 0), v.get("published_at") or "", v["video_id"]))
     return queue, errors
@@ -130,6 +135,7 @@ def run_queue(state, drive, downloader, queue, settings, summary, workdir, check
     handled = 0
     for item in queue:
         vid = item["video_id"]
+        previous_attempts = item.get("attempts", 0)
         if not state.complete(vid) and (handled >= settings["max_videos_per_run"] or
                 time.monotonic() - start >= settings["run_budget_minutes"] * 60):
             summary["videos"].append({"video_id": vid, "status": "deferred"})
@@ -141,7 +147,8 @@ def run_queue(state, drive, downloader, queue, settings, summary, workdir, check
         except Exception as exc:
             reason = str(exc) if isinstance(exc, ArchiveError) else "Unexpected internal failure; inspect tests/code (" + type(exc).__name__ + ")."
             if vid in state.data["videos"]:
-                state.update(vid, status="failed", error=reason)
+                state.update(vid, status="failed", error=reason,
+                             attempts=max(state.data["videos"][vid].get("attempts", 0), previous_attempts + 1))
             result = {"video_id": vid, "status": "failed", "error": reason}
             log("DOWNLOAD", video_id=vid, error=reason)
         summary["videos"].append(result)

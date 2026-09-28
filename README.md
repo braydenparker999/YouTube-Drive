@@ -2,6 +2,8 @@
 
 A small, fully online archiver for **public videos you have permission to download**. GitHub Actions checks creator RSS feeds daily, downloads sequentially with yt-dlp, uploads to Google Drive, and checkpoints each video in an inspectable JSON file. No computer or phone needs to stay online.
 
+**Current validation:** unit/recovery tests pass, but real YouTube metadata tests on GitHub Ubuntu and macOS runners were rejected with a sign-in/IP challenge. A healthy `mweb` PO-token provider did not resolve it on Ubuntu. No real Drive upload has been claimed. See [TESTING.md](TESTING.md) for evidence. Google authorization and a successfully tested YouTube egress route remain prerequisites.
+
 **First-use checklist:** authorize Google once → add four repository secrets → add creators or submit a manual URL → run the Action. The initial creator list is intentionally empty. There is no YouTube API key, service account, server, dashboard, or public HTTP endpoint.
 
 ## One-time setup
@@ -38,7 +40,7 @@ Open [Settings → Secrets and variables → Actions](https://github.com/brayden
 
 `GITHUB_TOKEN` is supplied automatically by GitHub. **Do not create a personal GitHub token for daily operation.** The archive job requests `contents: write` so it can checkpoint `state/archive.json`. Repository/organization policy and branch rules must permit that write; a rule requiring PRs for every `main` change will block checkpoints. Failures stop before uploads if state cannot be saved.
 
-No proxy, cookies, PO token, or YouTube API key is required by the initial configuration. Optional `YTDLP_PROXY` and `YTDLP_EXTRACTOR_ARGS` secrets are discussed under troubleshooting, not prerequisites.
+No cookies or YouTube API key are configured. Given the observed runner IP challenge, a working alternate egress route may be needed; `YTDLP_PROXY` can hold an authorized proxy URL. Verify it before relying on daily operation. `YTDLP_EXTRACTOR_ARGS` is an optional trusted extractor override.
 
 ### 4. Configure creators
 
@@ -89,7 +91,7 @@ Scheduled layout:
 
 MP4 is preferred when the selected codecs permit it; MKV/WebM are allowed without lossy re-encoding. Maximum quality is a ceiling, not a promise that YouTube exposes that resolution.
 
-Default safety/runner limits in the configuration: 25 new/retry videos per run, 4 GiB per finished file, 2 hours per video, and a 210-minute budget for starting work. One video at a time; 5–10 second download pacing; bounded extraction, fragment, upload and API retries. The workflow has a 6-hour hard limit. Runner disk is checked before each download; temporary media is removed after successful upload/checkpoint and also cleaned up when a failed job ends. Adjust settings within the validated bounds for your creators. An 8 GiB setting needs more free runner disk than the usual free hosted runner may provide because merging needs working space.
+Default safety/runner limits in the configuration: 25 new/retry videos per run, 4 GiB per finished file, 2 hours per video, a 210-minute budget for starting work, and at most 5 failed automatic attempts per video. After 5 failures, automatic retries pause; resolve the cause and manually resubmit the URL to retry it. One video at a time; 5–10 second download pacing; bounded extraction, fragment, upload and API retries. The workflow has a 6-hour hard limit. Runner disk is checked before each download; temporary media is removed after successful upload/checkpoint and also cleaned up when a failed job ends. Adjust settings within the validated bounds for your creators. An 8 GiB setting needs more free runner disk than the usual free hosted runner may provide because merging needs working space.
 
 A run that reaches its budget keeps discovered channel videos in state for the next run. Manual batches first validate and persist all confirmed public entries before media downloading begins, so validated requests survive a run budget or upload failure. A manual URL that fails extraction before that point must be submitted again; it is not durably queued yet. Keep manual batches modest. Completed duplicates are global: a later request for a different destination/quality returns the original Drive record, not another copy.
 
@@ -154,9 +156,9 @@ Top-level status: `complete`, `partial`, `setup_required`, `fatal`, or `interrup
 
 Each run installs one current prerelease/nightly via `pip install --upgrade --pre 'yt-dlp[default]'`, including the matching EJS challenge scripts. The version is logged and never updated mid-batch. Deno 2.9.6 is installed as the JS runtime, and ffmpeg/ffprobe handle merges/validation. Set the **repository variable** `YTDLP_VERSION` to a previously tested PyPI version (for example the exact version printed in installation logs) to roll back; clear it to resume nightly updates.
 
-The default uses yt-dlp's current default YouTube clients, no account cookies, IPv4, one fragment at a time and conservative retry/pacing settings. Upstream recommends trying `mweb` with a PO-token provider when default clients fail. This is **not blindly enabled**: a working provider must be explicitly installed/configured first. One optional trusted `YTDLP_EXTRACTOR_ARGS` secret feeds yt-dlp's extractor configuration so that a provider/client change stays isolated in `src/downloader.py`. Do not put credentials in config/channels.yml. No plugin/server is installed unnecessarily in v1.
+The default uses yt-dlp's current default YouTube clients, no account cookies, IPv4, one fragment at a time and conservative retry/pacing settings. Upstream recommends `mweb` with a PO-token provider when default clients fail. That combination was tested here: the provider started, but the hosted runner still received a sign-in/IP challenge. It is therefore optional, not presented as a proven fix. Set repository **variable** `YTDLP_USE_PO_PROVIDER=true` to install bgutil 2.0.0 and start its digest-pinned container on **127.0.0.1:4416 only**; the workflow selects `mweb` automatically. The container receives no Google/GitHub credentials and is discarded with the runner. Leave the variable unset for default clients. One optional trusted `YTDLP_EXTRACTOR_ARGS` secret overrides extractor configuration. Do not put credentials in config/channels.yml.
 
-An optional `YTDLP_PROXY` repository secret is passed only to yt-dlp, not to Drive or state/discovery. It can contain an authenticated egress URL. Do not rotate random clients, cookies, proxies and tokens together. Diagnose first. Proxy/PO support is an extension point, not a claim that every GitHub/Azure runner IP works. A single failed test is reported rather than followed by aggressive repeated probes.
+An optional `YTDLP_PROXY` repository secret is passed only to yt-dlp, not to Drive or state/discovery. It can contain an authenticated egress URL. Do not rotate random clients, cookies, proxies and tokens together. Diagnose first. Proxy/PO support is an extension point, not a claim that every GitHub/Azure runner IP works. The bounded diagnostics are recorded in TESTING.md; no automatic IP-rotation or repeated probing loop is implemented.
 
 ## Troubleshooting
 
@@ -173,7 +175,7 @@ An optional `YTDLP_PROXY` repository secret is passed only to yt-dlp, not to Dri
 | State HTTP 403 / conflict | Check Actions write permission and branch rules. Stop concurrent/manual state edits; rerun after resolving the conflict. Never bypass this by deleting state. |
 | Creator feed fails | Verify a stable UC ID; feed outages are isolated. Pending discovered videos still process. No full-channel scrape occurs. |
 | Scheduled run missing | Inspect Actions, default-branch workflow, disabled-workflow banner and GitHub status. Schedules can be delayed; manually dispatch with blank URLs for catch-up. |
-| File/duration/disk limit | Lower quality or carefully adjust settings. Live/upcoming/post-live entries wait until a final VOD is exposed. Permanent unavailable videos remain failed until configuration/state is deliberately reviewed. |
+| File/duration/disk limit | Lower quality or carefully adjust settings. Live/upcoming/post-live entries wait until a final VOD is exposed. After the configured failed-attempt limit, automatic retries pause; resubmit a URL manually after fixing the cause. |
 | New manual URL failed before metadata | Resubmit it. Public metadata confirmation occurs before its durable entry is created. |
 
 ## Development and tests
@@ -186,7 +188,7 @@ python -m ruff check src scripts tests
 
 Unit tests use simulated Drive/GitHub failures and tiny local bytes, never credentials or real media downloads. Coverage includes URL/feed parsing, validation, filenames, state updates/conflicts, duplicate skips, failed-creator/video isolation, upload/checkpoint crash recovery, chunk offset recovery, expired sessions, OAuth refresh, secret/log isolation and workflow security.
 
-The **Tests** workflow runs without archive secrets on PRs and trusted pushes. Its separate metadata smoke job makes one bounded request to the public “Me at the zoo” video on trusted pushes/manual test runs only; it downloads no media and intentionally reports a failure when the runner cannot extract. A green unit job does not imply that a red YouTube smoke job is healthy. The archiver itself runs only on schedule/manual dispatch from the default branch; there is no `pull_request_target` or secret-bearing PR workflow. Third-party Actions are pinned to commit SHAs, checkout does not persist Git credentials, workflow inputs enter environment variables rather than shell programs, and yt-dlp/JS/ffmpeg subprocesses do not receive Google/GitHub credentials.
+The **Tests** workflow runs without archive secrets on PRs and trusted pushes. For an explicit network check, run **Tests → Run workflow → network_smoke=true**. Optionally select `po_provider=true` to test `mweb` with the documented provider. The separate metadata smoke job makes one bounded request to the public “Me at the zoo” video, downloads no media, and intentionally reports a failure when the runner cannot extract. Network checks do not rerun on every code push or PR after the known egress failure. A green unit job does not imply that a red YouTube smoke job is healthy. The archiver itself runs only on schedule/manual dispatch from the default branch; there is no `pull_request_target` or secret-bearing PR workflow. Third-party Actions are pinned to commit SHAs, checkout does not persist Git credentials, workflow inputs enter environment variables rather than shell programs, and yt-dlp/JS/ffmpeg subprocesses do not receive Google/GitHub credentials.
 
 ## Upstream references
 
@@ -196,5 +198,6 @@ The **Tests** workflow runs without archive secrets on PRs and trusted pushes. I
 - [Drive resumable uploads and pre-generated IDs](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
 - [Google OAuth refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)
 - [Google personal-use verification exception](https://support.google.com/cloud/answer/13464323)
+- [Optional bgutil PO-token provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
 - [GitHub concurrency queues](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 - [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)

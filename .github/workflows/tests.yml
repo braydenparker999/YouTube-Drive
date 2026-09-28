@@ -6,6 +6,15 @@ on:
   pull_request:
     paths-ignore: ['state/**', '**.md']
   workflow_dispatch:
+    inputs:
+      network_smoke:
+        description: 'Make one bounded YouTube metadata request (no media or Drive upload)'
+        type: boolean
+        default: false
+      po_provider:
+        description: 'Use documented mweb + PO-token provider in the network smoke test'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -34,9 +43,10 @@ jobs:
           assert json.load(open('run-summary.json'))['status'] == 'setup_required'
           PY
   metadata-smoke:
-    # A single harmless metadata request on trusted pushes; never on PRs. No Drive/GitHub write credentials.
-    if: github.event_name != 'pull_request'
-    runs-on: macos-15
+    # Explicit diagnostic only: do not repeatedly probe a known-blocked host on code changes.
+    # No Drive/GitHub write credentials, and never runs for pull requests.
+    if: github.event_name == 'workflow_dispatch' && inputs.network_smoke
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,5 +59,10 @@ jobs:
           python -m pip install -r requirements.txt
           npm install --global deno@2.9.6
           python scripts/install_ytdlp.py
+      - name: Start optional PO-token provider
+        if: inputs.po_provider
+        run: python scripts/setup_po_provider.py
       - name: Metadata only (public video metadata; no media downloaded)
+        env:
+          YTDLP_EXTRACTOR_ARGS: ${{ inputs.po_provider && 'youtube:player_client=mweb' || '' }}
         run: python -m src.main --metadata-only https://www.youtube.com/watch?v=jNQXAC9IVRw

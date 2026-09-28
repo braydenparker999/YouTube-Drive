@@ -74,6 +74,9 @@ jobs:
           deno --version
           ffmpeg -version | head -n 1
           python scripts/install_ytdlp.py
+      - name: Start optional PO-token provider
+        if: vars.YTDLP_USE_PO_PROVIDER == 'true'
+        run: python scripts/setup_po_provider.py
       - name: Discover, download, upload, checkpoint
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -83,7 +86,7 @@ jobs:
           GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
           GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
           YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
-          YTDLP_EXTRACTOR_ARGS: ${{ secrets.YTDLP_EXTRACTOR_ARGS }}
+          YTDLP_EXTRACTOR_ARGS: ${{ secrets.YTDLP_EXTRACTOR_ARGS || (vars.YTDLP_USE_PO_PROVIDER == 'true' && 'youtube:player_client=mweb') || '' }}
           INPUT_URLS: ${{ inputs.urls }}
           INPUT_DESTINATION: ${{ inputs.destination }}
           INPUT_MAX_QUALITY: ${{ inputs.max_quality }}
