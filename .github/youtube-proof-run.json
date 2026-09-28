@@ -1,1 +1,1 @@
-{"attempt": 6, "hypothesis": "Compare bgutil mweb player-token configuration through an anonymous WARP local proxy; diagnose browser startup separately."}
+{"attempt": 7, "hypothesis": "A cold browser becomes ready after nodriver 0.50.3 gives up; increase only its startup wait to 30 seconds."}
