@@ -17,7 +17,7 @@ def child_env():
     # yt-dlp/JS/ffmpeg never receive Google/GitHub credentials.
     allowed = {"PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "SYSTEMROOT", "SSL_CERT_FILE",
                "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-               "http_proxy", "https_proxy", "all_proxy", "no_proxy", "PYTHONPATH"}
+               "http_proxy", "https_proxy", "all_proxy", "no_proxy", "PYTHONPATH", "DISPLAY", "XAUTHORITY"}
     return {k: v for k, v in os.environ.items() if k in allowed}
 
 
@@ -62,6 +62,9 @@ def diagnostic_events(stderr):
             ('Generating a player PO Token', 'player_token_requested'),
             ('Generating a gvs PO Token', 'gvs_token_requested'),
             ('Generated POT:', 'token_generated'),
+            ('Minting player PO Token', 'browser_player_token_requested'),
+            ('Retrieved player PO Token:', 'browser_player_token_generated'),
+            ('Waiting for WebPoClient', 'browser_token_wait'),
             ('Sign in to confirm', 'sign_in_challenge'),
             ('not a bot', 'bot_check'),
             ('Error reaching POST /get_pot', 'token_provider_error'),
@@ -71,7 +74,7 @@ def diagnostic_events(stderr):
             if marker in line:
                 events.append({'event': event})
         if 'PO Token Providers:' in line:
-            events.append({'event': 'provider_registry', 'bgutil_http': 'bgutil:http' in line})
+            events.append({'event': 'provider_registry', 'bgutil_http': 'bgutil:http' in line, 'wpc': 'wpc-' in line})
         if 'JS runtimes:' in line:
             events.append({'event': 'runtime_registry', 'deno': 'deno-' in line})
     return events

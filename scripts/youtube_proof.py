@@ -54,7 +54,7 @@ def main():
     except (OSError, subprocess.SubprocessError, ValueError):
         report['error'] = 'Proof runtime or full-media validation failed.'
     Path('youtube-proof.json').write_text(json.dumps(report, indent=2) + '\n')
-    log('PROOF', **report)
+    log('PROOF', result=report)
     return 0 if report['status'] == 'complete' else 1
 
 

@@ -1,1 +1,1 @@
-{"attempt": 1, "hypothesis": "Request a player-context token before the mweb player API, not just a GVS token after formats exist."}
+{"attempt": 2, "hypothesis": "Use the documented browser-based token provider instead of bgutil; keep mweb, runtime and video fixed."}
