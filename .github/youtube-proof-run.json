@@ -1,1 +1,1 @@
-{"attempt": 3, "hypothesis": "Allow browser provider to run: it rejects force-ipv4/source-address according to its capability declaration."}
+{"attempt": 4, "hypothesis": "Diagnose Chrome startup offline; do not contact YouTube unless the browser preflight succeeds."}
