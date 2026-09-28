@@ -39,6 +39,8 @@ jobs:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      YTDRIVE_EGRESS: ${{ secrets.YTDLP_PROXY && 'custom' || vars.YTDLP_EGRESS || 'warp' }}
     permissions:
       contents: write
     steps:
@@ -64,19 +66,10 @@ jobs:
           INPUT_MAX_QUALITY: ${{ inputs.max_quality }}
           INPUT_REQUEST_ID: ${{ inputs.request_id }}
         run: python -m src.main --check-setup
-      - name: Install media tools
+      - name: Install and verify the tested YouTube runtime
         env:
           YTDLP_VERSION: ${{ vars.YTDLP_VERSION }}
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
-          npm install --global deno@2.9.6
-          deno --version
-          ffmpeg -version | head -n 1
-          python scripts/install_ytdlp.py
-      - name: Start optional PO-token provider
-        if: vars.YTDLP_USE_PO_PROVIDER == 'true'
-        run: python scripts/setup_po_provider.py
+        run: bash scripts/setup_youtube_runtime.sh
       - name: Discover, download, upload, checkpoint
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -85,8 +78,8 @@ jobs:
           GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
           GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
           GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
-          YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
-          YTDLP_EXTRACTOR_ARGS: ${{ secrets.YTDLP_EXTRACTOR_ARGS || (vars.YTDLP_USE_PO_PROVIDER == 'true' && 'youtube:player_client=mweb') || '' }}
+          YTDLP_PROXY: ${{ secrets.YTDLP_PROXY || (env.YTDRIVE_EGRESS == 'warp' && 'http://127.0.0.1:40000') || '' }}
+          YTDLP_EXTRACTOR_ARGS: ${{ secrets.YTDLP_EXTRACTOR_ARGS || 'youtube:player_client=mweb;fetch_pot=always' }}
           INPUT_URLS: ${{ inputs.urls }}
           INPUT_DESTINATION: ${{ inputs.destination }}
           INPUT_MAX_QUALITY: ${{ inputs.max_quality }}

@@ -1,4 +1,4 @@
-"""Diagnostic-only anonymous WARP local proxy on a disposable GitHub runner.
+"""Anonymous WARP local proxy on a disposable GitHub runner.
 
 No paid plan, user account, organization enrollment, or exported device keys.
 Only explicitly proxied traffic uses WARP. Do not run on a personal workstation.
@@ -15,7 +15,7 @@ def command(args, timeout=30):
 
 def main():
     if os.environ.get('GITHUB_ACTIONS') != 'true':
-        raise SystemExit('WARP diagnostic setup is restricted to disposable GitHub Actions runners.')
+        raise SystemExit('WARP setup is restricted to disposable GitHub Actions runners.')
     try:
         print('[EGRESS] ' + command(['warp-cli', '--version']).strip(), flush=True)
         command(['warp-cli', '--accept-tos', 'registration', 'new'])

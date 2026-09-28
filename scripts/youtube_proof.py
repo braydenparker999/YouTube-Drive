@@ -25,7 +25,7 @@ def verify_media(path, expected_duration):
     duration = float(info.get('format', {}).get('duration', 0))
     if not {'video', 'audio'}.issubset({s.get('codec_type') for s in streams}):
         raise ArchiveError('Proof requires both audio and video streams.')
-    if abs(duration - expected_duration) > max(2, expected_duration * 0.05):
+    if duration <= 0 or abs(duration - expected_duration) > max(2, expected_duration * 0.05):
         raise ArchiveError('Proof file duration does not match the complete video.')
     # Decode the entire small file; a valid header alone is not proof of a complete download.
     subprocess.run(['ffmpeg', '-v', 'error', '-xerror', '-i', str(path), '-f', 'null', '-'],

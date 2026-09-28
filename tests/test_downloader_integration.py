@@ -3,6 +3,7 @@ import contextlib
 import functools
 import hashlib
 import http.server
+import json
 import os
 import subprocess
 import tempfile
@@ -11,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts.youtube_proof import verify_media
 from src.downloader import Downloader
 
 
@@ -37,6 +39,20 @@ class DownloaderIntegration(unittest.TestCase):
                 with patch.dict(os.environ, {'NO_PROXY': '127.0.0.1,localhost', 'no_proxy': '127.0.0.1,localhost'}):
                     downloader = Downloader({'max_file_gib': 1, 'max_duration_seconds': 7200}, directory)
                     result = downloader.download(info['id'], 1080, info, directory)
+                    # Exercise separate A/V formats and the metadata -> load-info-json round trip.
+                    merged_dir = root / 'merged'
+                    merged_dir.mkdir()
+                    fixture = {'id': info['id'], 'title': 'Merge fixture', 'formats': [
+                        {**info, 'format_id': 'video', 'acodec': 'none'},
+                        {**info, 'format_id': 'audio', 'vcodec': 'none'},
+                    ]}
+                    fixture_path = root / 'fixture.json'
+                    fixture_path.write_text(json.dumps(fixture))
+                    metadata = downloader.run(downloader.options(1080) + [
+                        '--skip-download', '--dump-single-json', '--load-info-json', str(fixture_path)])
+                    merged = downloader.download(info['id'], 1080, json.loads(metadata), merged_dir)
+                    self.assertTrue(verify_media(merged, 0.5)['full_decode'])
+                    self.assertFalse((merged_dir / 'metadata.json').exists())
                 self.assertEqual(hashlib.sha256(result.read_bytes()).digest(), hashlib.sha256(source.read_bytes()).digest())
                 self.assertFalse((directory / 'metadata.json').exists())
                 self.assertEqual(result.name, 'media.mp4')

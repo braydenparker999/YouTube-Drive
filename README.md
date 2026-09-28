@@ -2,9 +2,15 @@
 
 A small, fully online archiver for **public videos you have permission to download**. GitHub Actions checks creator RSS feeds daily, downloads sequentially with yt-dlp, uploads to Google Drive, and checkpoints each video in an inspectable JSON file. No computer or phone needs to stay online.
 
-**Current validation:** unit/recovery tests pass, but real YouTube metadata tests on GitHub Ubuntu and macOS runners were rejected with a sign-in/IP challenge. A healthy `mweb` PO-token provider did not resolve it on Ubuntu. No real Drive upload has been claimed. See [TESTING.md](TESTING.md) for evidence. Google authorization and a successfully tested YouTube egress route remain prerequisites.
+**Current validation:** real YouTube downloads now pass on fresh GitHub-hosted runners using a verified Cloudflare WARP local proxy, current yt-dlp nightly, `mweb`, and bgutil PO tokens. The test checks the complete downloaded audio/video, merge, duration, and full decode. **Google Drive upload remains untested until Google authorization is supplied.** See [TESTING.md](TESTING.md) for run links and limits.
 
-**First-use checklist:** authorize Google once → add four repository secrets → add creators or submit a manual URL → run the Action. The initial creator list is intentionally empty. There is no YouTube API key, service account, server, dashboard, or public HTTP endpoint.
+**First-use order:** prove YouTube download → authorize Google once → add four repository secrets → add creators or submit a manual URL → verify the Drive upload and duplicate skip. The initial creator list is intentionally empty. No YouTube API key, signed-in YouTube account, paid proxy, always-on personal computer, or public HTTP endpoint is required by the tested configuration.
+
+## YouTube proof comes first
+
+[YouTube download proof](https://github.com/braydenparker999/YouTube-Drive/actions/workflows/youtube-proof.yml) runs the same downloader and runtime installer as the archive, without Google authorization or archive-state writes. **Run workflow → main** repeats one short public video on three fresh runners, sequentially. Each must report `status: complete`, `stage: verified`, audio and video streams, matching duration, and `full_decode: true`. It saves only sanitized JSON evidence; media and raw metadata are deleted.
+
+This gate has been exercised during the build. Rerun it after changing egress or upgrading a suspect runtime. A green unit-test workflow alone does not satisfy this gate. Configure Drive only after this proof succeeds.
 
 ## One-time setup
 
@@ -40,7 +46,7 @@ Open [Settings → Secrets and variables → Actions](https://github.com/brayden
 
 `GITHUB_TOKEN` is supplied automatically by GitHub. **Do not create a personal GitHub token for daily operation.** The archive job requests `contents: write` so it can checkpoint `state/archive.json`. Repository/organization policy and branch rules must permit that write; a rule requiring PRs for every `main` change will block checkpoints. Failures stop before uploads if state cannot be saved.
 
-No cookies or YouTube API key are configured. Given the observed runner IP challenge, a working alternate egress route may be needed; `YTDLP_PROXY` can hold an authorized proxy URL. Verify it before relying on daily operation. `YTDLP_EXTRACTOR_ARGS` is an optional trusted extractor override.
+No cookies or YouTube API key are configured. The tested WARP egress is the default and needs no repository secret, paid plan, or personal Cloudflare login. `YTDLP_PROXY` optionally replaces it with your own authorized proxy. `YTDLP_EXTRACTOR_ARGS` is an optional trusted extractor override.
 
 ### 4. Configure creators
 
@@ -156,9 +162,15 @@ Top-level status: `complete`, `partial`, `setup_required`, `fatal`, or `interrup
 
 Each run installs one current prerelease/nightly via `pip install --upgrade --pre 'yt-dlp[default]'`, including the matching EJS challenge scripts. The version is logged and never updated mid-batch. Deno 2.9.6 is installed as the JS runtime, and ffmpeg/ffprobe handle merges/validation. Set the **repository variable** `YTDLP_VERSION` to a previously tested PyPI version (for example the exact version printed in installation logs) to roll back; clear it to resume nightly updates.
 
-The default uses yt-dlp's current default YouTube clients, no account cookies, IPv4, one fragment at a time and conservative retry/pacing settings. Upstream recommends `mweb` with a PO-token provider when default clients fail. That combination was tested here: the provider started, but the hosted runner still received a sign-in/IP challenge. It is therefore optional, not presented as a proven fix. Set repository **variable** `YTDLP_USE_PO_PROVIDER=true` to install bgutil 2.0.0 and start its digest-pinned container on **127.0.0.1:4416 only**; the workflow selects `mweb` automatically. The container receives no Google/GitHub credentials and is discarded with the runner. Leave the variable unset for default clients. One optional trusted `YTDLP_EXTRACTOR_ARGS` secret overrides extractor configuration. Do not put credentials in config/channels.yml.
+The tested default uses `mweb;fetch_pot=always`, IPv4, one video/fragment at a time, paced requests, and bounded retries. Each runner starts bgutil 2.0.0 from its digest-pinned image on **127.0.0.1:4416 only**. Tokens are generated automatically for the current request. Direct GitHub runner egress failed even with generated player tokens; token generation alone is not proof of YouTube access.
 
-An optional `YTDLP_PROXY` repository secret is passed only to yt-dlp, not to Drive or state/discovery. It can contain an authenticated egress URL. Do not rotate random clients, cookies, proxies and tokens together. Diagnose first. Proxy/PO support is an extension point, not a claim that every GitHub/Azure runner IP works. The bounded diagnostics are recorded in TESTING.md; no automatic IP-rotation or repeated probing loop is implemented.
+**Default egress is Cloudflare WARP local-proxy mode.** The runner installs the official signed package, creates an anonymous disposable device registration, binds the proxy at `127.0.0.1:40000`, and requires Cloudflare's trace endpoint to confirm `warp=on` before downloading. Registration/device credentials remain only on the disposable runner. This uses no paid WARP+ plan or organization account. Only yt-dlp and its token-provider requests are explicitly proxied. RSS discovery, GitHub state, and Google Drive use the regular network. WARP changes the network route; it cannot guarantee that YouTube will always accept every shared exit IP.
+
+Both workflows call `scripts/setup_youtube_runtime.sh`, which explicitly installs and verifies ffmpeg/ffprobe. Downloads fail before transferring media if those tools are absent, and yt-dlp is instructed to abort on errors instead of leaving unmerged streams while reporting success.
+
+To replace egress, set the **`YTDLP_PROXY` secret** to your authorized HTTP/SOCKS proxy URL; it takes precedence and skips WARP setup. To intentionally test bare runner egress, set the **`YTDLP_EGRESS` repository variable** to `direct` and leave the proxy secret unset. Clear that variable to restore WARP. Keep the provider and downloader on the same egress. No Google/GitHub secrets are passed into the provider container or media subprocesses. The old `YTDLP_USE_PO_PROVIDER` variable is no longer needed: the tested configuration starts the provider automatically.
+
+The browser-based alternative was investigated but did not resolve direct-egress rejection; it is not part of the production runtime. No automatic client switching, IP rotation loop, account cookies, or random proxy list is implemented.
 
 ## Troubleshooting
 
@@ -166,7 +178,9 @@ An optional `YTDLP_PROXY` repository secret is passed only to yt-dlp, not to Dri
 | --- | --- |
 | Missing repository secrets | Add the four exact names above. No stack trace or download occurs before setup checks pass. |
 | yt-dlp extraction / JS failure | Inspect logged version; verify Deno and EJS install steps. Try one known public video. If a nightly regression is identified, set `YTDLP_VERSION` to the last working version. |
-| YouTube HTTP 403 / sign-in / IP challenge | Public videos can be rejected from datacenter IPs. Try a later run once. If repeatable, configure and test a documented PO-token provider with `mweb`, or authorized alternate egress. Do not add account cookies by default. |
+| YouTube HTTP 403 / sign-in / IP challenge | Check the egress health and yt-dlp/provider versions. Run the separate proof once. WARP/shared IPs may be blocked later; leave bounded retries enabled, or test an authorized replacement via `YTDLP_PROXY`. Do not add account cookies by default. |
+| WARP setup/tunnel failure | The runtime stops before YouTube downloads. Retry a later run; inspect official-package installation and the egress health step. A custom proxy secret replaces WARP without redesigning the pipeline. |
+| Missing ffmpeg/ffprobe | The shared runtime installation must pass before downloading; do not remove the explicit apt install/preflight. |
 | YouTube HTTP 429 | Stop immediate reruns. Keep pacing/low concurrency; retry on the next scheduled run or reduce the batch size. |
 | Google `invalid_grant` / expired authentication | Reauthorize using your own OAuth client in production and replace the refresh-token secret. Testing-mode tokens normally expire after 7 days. |
 | Drive 403 / quota | Check account storage, Drive API enabled, granted scope and write permission to the root. `storageQuotaExceeded` is not solved by repeated retries. |
@@ -188,7 +202,9 @@ python -m ruff check src scripts tests
 
 Unit tests use simulated Drive/GitHub failures and tiny local bytes, never credentials or real media downloads. Coverage includes URL/feed parsing, validation, filenames, state updates/conflicts, duplicate skips, failed-creator/video isolation, upload/checkpoint crash recovery, chunk offset recovery, expired sessions, OAuth refresh, secret/log isolation and workflow security.
 
-The **Tests** workflow runs without archive secrets on PRs and trusted pushes. For an explicit network check, run **Tests → Run workflow → network_smoke=true**. Optionally select `po_provider=true` to test `mweb` with the documented provider. The separate metadata smoke job makes one bounded request to the public “Me at the zoo” video, downloads no media, and intentionally reports a failure when the runner cannot extract. Network checks do not rerun on every code push or PR after the known egress failure. A green unit job does not imply that a red YouTube smoke job is healthy. The archiver itself runs only on schedule/manual dispatch from the default branch; there is no `pull_request_target` or secret-bearing PR workflow. Third-party Actions are pinned to commit SHAs, checkout does not persist Git credentials, workflow inputs enter environment variables rather than shell programs, and yt-dlp/JS/ffmpeg subprocesses do not receive Google/GitHub credentials.
+The **Tests** workflow runs without secrets or YouTube requests on PRs and trusted pushes. The separate **YouTube download proof** workflow is manual-only, restricted to the default branch, and uses no Google credentials. It tests the actual downloaded media, rather than stopping at metadata. A passing unit job does not imply a passing network proof.
+
+The archiver itself runs only on schedule/manual dispatch from the default branch; there is no `pull_request_target` or secret-bearing PR workflow. Third-party Actions are pinned to commit SHAs, checkout does not persist Git credentials, workflow inputs enter environment variables rather than shell programs, and yt-dlp/JS/ffmpeg subprocesses do not receive Google/GitHub credentials.
 
 ## Upstream references
 
@@ -198,6 +214,9 @@ The **Tests** workflow runs without archive secrets on PRs and trusted pushes. F
 - [Drive resumable uploads and pre-generated IDs](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
 - [Google OAuth refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)
 - [Google personal-use verification exception](https://support.google.com/cloud/answer/13464323)
-- [Optional bgutil PO-token provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
+- [bgutil PO-token provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
 - [GitHub concurrency queues](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 - [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+
+- [Cloudflare WARP Linux setup](https://developers.cloudflare.com/warp-client/get-started/linux/)
+- [Cloudflare WARP local proxy mode](https://developers.cloudflare.com/warp-client/warp-modes/)

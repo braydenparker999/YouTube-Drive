@@ -2,9 +2,9 @@
 
 ## Outcome
 
-The implementation is committed and its local functional/recovery/security tests pass. **A real YouTube → Drive archive is not yet proven operational.** Google OAuth/root secrets have not been supplied to this build, and tested GitHub-hosted YouTube metadata extraction was rejected by YouTube's sign-in/IP challenge.
+**The YouTube download gate passed on three fresh GitHub-hosted Ubuntu runners.** Each downloaded the complete public test video's audio and video through Cloudflare WARP, merged them, checked duration/streams, and decoded the entire file with ffmpeg. No signed-in YouTube account, account cookies, paid proxy, or Google Drive authorization was used.
 
-Do not interpret a passing unit-test workflow as a successful YouTube network test or Drive upload.
+**The complete YouTube → Drive archive is not yet end-to-end verified:** Google OAuth/root secrets are still missing. Unit and simulated recovery tests are separate evidence from the real download proof.
 
 ## Tests performed
 
@@ -35,27 +35,47 @@ Do not interpret a passing unit-test workflow as a successful YouTube network te
 | GitHub-hosted test workflow | Started successfully; unit, lint and missing-secret startup jobs passed |
 | Archive workflow registration | GitHub API reports active, ID 369471602 |
 | Real Google OAuth / Drive upload | Not run: authorization secrets are missing |
-| Real scheduled/manual archive job to completion | Not run: external prerequisites remain |
+| Real scheduled/manual archive job to completion | Not run: Google authorization remains |
+| Real YouTube media on three fresh runners | Passed: download, A/V merge, duration and full ffmpeg decode |
+| Missing ffmpeg and misleading traceback status codes | Regression tests pass; fail clearly before download |
+| Shared proof/archive runtime and secret isolation | Workflow/security tests pass |
 
-The local suite contains **42 tests**: 41 safe/unit tests plus the opt-in real local-media integration test. Enable the integration test with `YTDRIVE_INTEGRATION=1` after installing yt-dlp and ffmpeg. Regular CI intentionally skips that optional test if its flag is absent.
+The local suite contains **47 tests**: 46 safe/unit tests plus the opt-in real local-media integration test. Enable the integration test with `YTDRIVE_INTEGRATION=1` after installing yt-dlp and ffmpeg. Regular CI intentionally skips that optional test if its flag is absent.
 
 ## Hosted network evidence
 
-Only bounded metadata requests were made; no YouTube video media was downloaded.
+### Successful acceptance run
 
-1. [Initial CI](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36474002561): unit/startup tests passed; the old `BaW_jenozKc` fixture failed. A separate diagnostic confirmed that video was unavailable. Replaced that fixture.
-2. [Ubuntu/default clients](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36474493251): current nightly `2026.09.27.232945`, Deno/EJS installed, public `jNQXAC9IVRw` metadata failed with a sign-in/IP challenge. Unit/startup tests passed.
-3. [Ubuntu/mweb + PO provider](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36474784191): bgutil 2.0.0 installed, local provider health check passed, same public video's metadata still received a sign-in/IP challenge. No cookies/proxy were added. Unit/startup tests passed.
-4. [macOS/default clients](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36475006139): a standard macOS runner, using its different hosting network, also received the sign-in/IP challenge. Unit/startup tests passed.
+[Run 36484792964](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484792964), commit `c9b77be74fa312fb488a827fde16f0db544f0dda`, performed three sequential jobs on fresh runners:
 
-The workspace's first local YouTube check additionally encountered its proxy's CA trust issue. A diagnostic using the configured system trust store confirmed the old fixture was unavailable; TLS verification was not disabled. The successful local-media integration test does not depend on YouTube access.
+| Trial | Job | Result | Media |
+| --- | --- | --- | --- |
+| 1 | [109138966780](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484792964/job/109138966780) | Complete, fully decoded | 474,599 bytes; 19.028 seconds; video + audio |
+| 2 | [109138966769](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484792964/job/109138966769) | Complete, fully decoded | 474,599 bytes; 19.028 seconds; video + audio |
+| 3 | [109138966721](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484792964/job/109138966721) | Complete, fully decoded | 474,599 bytes; 19.028 seconds; video + audio |
 
-After diagnosing the external block, network smoke testing was made **explicitly opt-in** (`Tests` workflow → `network_smoke=true`) so routine code pushes do not repeatedly probe a blocked service. `po_provider=true` selects the documented `mweb` combination for that diagnostic. The final archiver retains default clients, with an optional provider repository variable and a secret-based egress extension point.
+Fixture: `jNQXAC9IVRw` (Me at the zoo), 320×240 source. Runtime: yt-dlp nightly `2026.09.27.232945`, Deno 2.9.6, matching EJS, ffmpeg/ffprobe 6.1.1, bgutil 2.0.0, WARP client 2026.7.1377.0. `mweb;fetch_pot=always`, IPv4, one fragment at a time, paced requests. Both yt-dlp and the token provider used the same loopback WARP proxy; its active tunnel was verified before contacting YouTube.
+
+The proof records each file's SHA-256, duration, byte size and streams. Container hashes can differ because muxing metadata changes between runs. No media, tokens, signed media URLs, browser profiles, device keys, or raw yt-dlp metadata were published as artifacts or committed. The test does not write completion records to archive state.
+
+This proves small public-video downloads on fresh runners with the tested route. It does **not** prove uninterrupted future YouTube access, every creator/region, high-resolution or multi-hour stress behavior, or Drive upload. WARP exit addresses can be blocked later; bounded failures and the replaceable proxy interface remain necessary.
+
+### Diagnostic history and fixes
+
+- [Ubuntu/default clients](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36474493251), [Ubuntu/mweb provider](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36474784191), and [macOS/default clients](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36475006139) failed with the sign-in/IP challenge.
+- [Explicit bgutil player token](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36482575230) was generated successfully, but YouTube returned `LOGIN_REQUIRED` and the bot check. A generated token alone was not sufficient.
+- Browser-provider investigation found unsupported forced source binding, a Chromium sandbox incompatibility, and nodriver's too-short cold-start deadline. After using installed Google Chrome with its sandbox and extending the pinned startup wait, [the browser provider minted a player token](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484002157), but direct egress still received `LOGIN_REQUIRED`. Experimental browser machinery was removed from production; its diagnostic commits preserve the investigation.
+- [First WARP comparison](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36483766832) reached playable formats. [Output inspection](https://github.com/braydenparker999/YouTube-Drive/actions/runs/36484375076) confirmed both video and audio had downloaded, but the proof job had omitted ffmpeg. Its piped version check had hidden the missing command. Fixed by explicit installation/preflight and `--abort-on-error`; only merged, verified files count as success.
+- Added credential-free allowlisted diagnostics. Fixed a classifier that mistook traceback line 407 for HTTP 407. Added a regression test for failure-summary logging.
+- Extended the local real-media test to cover separate A/V formats, metadata serialization/reload, merging and full decode. Local synthetic media is not counted as YouTube access evidence.
+
+The final proof is manual-only and uses the same runtime installer and downloader as the archive. Routine code pushes and PR tests do not hit YouTube. Google credentials are absent from the proof workflow. No browser sandbox or TLS verification was disabled.
 
 ## Remaining prerequisites
 
-1. Complete the README's browser-only Google authorization and create `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`, and `GDRIVE_ROOT_FOLDER_ID` repository secrets.
-2. Establish a working permitted YouTube egress route from the archiver runner and test it. `YTDLP_PROXY` is supported for an authorized proxy if needed; no external proxy was purchased, provisioned, or assumed to work. A PO token alone did not fix the observed block. A different future runner might work, but that has not been demonstrated here.
-3. Add the actual creator channel IDs to `config/channels.yml` (currently empty), or supply one authorized public video URL for the first manual test.
+1. With the YouTube download gate now demonstrated, complete the README's browser-only Google authorization and create `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`, and `GDRIVE_ROOT_FOLDER_ID` repository secrets.
+2. Add actual creator channel IDs to `config/channels.yml` (currently empty), or supply one authorized public video URL for the first manual test.
+
+No additional YouTube account or proxy credential is required for the tested default. The remaining external blocker for the first real Drive test is Google authorization/root configuration.
 
 First end-to-end acceptance: one short authorized public video uploads, Drive size/MD5/YouTube ID verify, state becomes complete, and rerunning the URL returns exactly the same Drive ID with `skipped: true`. Repeat using an enabled creator for scheduled-mode discovery, then confirm the next daily invocation. Those real acceptance checks must happen after the external prerequisites are ready.

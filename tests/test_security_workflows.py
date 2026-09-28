@@ -87,3 +87,15 @@ class SecurityTests(unittest.TestCase):
         tests = (ROOT / '.github/workflows/tests.yml').read_text()
         self.assertNotIn('secrets.', tests)
         self.assertNotIn('contents: write', tests)
+
+    def test_proof_uses_same_runtime_without_drive_credentials(self):
+        archive = yaml.load((ROOT / '.github/workflows/youtube-archive.yml').read_text(), Loader=yaml.BaseLoader)
+        proof_path = ROOT / '.github/workflows/youtube-proof.yml'
+        proof = yaml.load(proof_path.read_text(), Loader=yaml.BaseLoader)
+        self.assertEqual(set(proof['on']), {'workflow_dispatch'})
+        self.assertNotIn('GDRIVE_', proof_path.read_text())
+        self.assertIn('default_branch', proof['jobs']['proof']['if'])
+        self.assertEqual(proof['jobs']['proof']['strategy']['max-parallel'], '1')
+        for job in [archive['jobs']['archive'], proof['jobs']['proof']]:
+            self.assertIn('bash scripts/setup_youtube_runtime.sh', [s.get('run') for s in job['steps']])
+            self.assertIn("'warp'", job['env']['YTDRIVE_EGRESS'])

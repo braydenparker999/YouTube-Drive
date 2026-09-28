@@ -17,7 +17,7 @@ def child_env():
     # yt-dlp/JS/ffmpeg never receive Google/GitHub credentials.
     allowed = {"PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "SYSTEMROOT", "SSL_CERT_FILE",
                "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-               "http_proxy", "https_proxy", "all_proxy", "no_proxy", "PYTHONPATH", "DISPLAY", "XAUTHORITY"}
+               "http_proxy", "https_proxy", "all_proxy", "no_proxy", "PYTHONPATH"}
     return {k: v for k, v in os.environ.items() if k in allowed}
 
 
@@ -134,7 +134,7 @@ class Downloader:
 
     def options(self, height):
         opts = ["--ignore-config", "--no-playlist", "--no-progress", "--no-colors", "--no-warnings",
-                "--no-overwrites", "--continue", "--abort-on-error", "--concurrent-fragments", "1",
+                "--no-overwrites", "--continue", "--abort-on-error", "--force-ipv4", "--concurrent-fragments", "1",
                 "--retries", "3", "--fragment-retries", "3", "--extractor-retries", "2",
                 "--socket-timeout", "30", "--retry-sleep", "http:exp=2:20", "--retry-sleep", "fragment:exp=2:20",
                 "--sleep-requests", "1", "--sleep-interval", "5", "--max-sleep-interval", "10",
@@ -142,14 +142,10 @@ class Downloader:
                 "--max-filesize", str(self.settings["max_file_gib"] * 1024**3),
                 "--format", f"bv*[height<={height}]+ba/b[height<={height}]",
                 "--merge-output-format", "mp4/mkv", "--js-runtimes", "deno"]
-        if self.env.get("YTDLP_IP_FAMILY", "4") != "auto":
-            opts += ["--force-ipv4"]
         # Trusted maintainer secret only; never supplied through workflow_dispatch.
         # This one extension point can enable mweb + an installed PO-token provider.
         if self.env.get("YTDLP_EXTRACTOR_ARGS"):
             opts += ["--extractor-args", self.env["YTDLP_EXTRACTOR_ARGS"]]
-        if self.env.get("YTDLP_BROWSER_PATH"):
-            opts += ["--extractor-args", "youtubepot-wpc:browser_path=" + self.env["YTDLP_BROWSER_PATH"]]
         if self.env.get("YTDLP_PROXY"):
             opts += ["--proxy", self.env["YTDLP_PROXY"]]
         if getattr(self, 'diagnostics', False):

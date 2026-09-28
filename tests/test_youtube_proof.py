@@ -46,15 +46,6 @@ class DiagnosticTests(unittest.TestCase):
         self.assertIn('sign-in', classify_error('line 407\nERROR: Sign in to confirm you are not a bot'))
         self.assertIn('proxy authentication', classify_error('HTTP Error 407: Proxy Authentication Required'))
 
-    def test_browser_provider_can_use_automatic_ip_family(self):
-        from src.downloader import Downloader
-        downloader = object.__new__(Downloader)
-        downloader.settings = {'max_file_gib': 1}
-        downloader.env = {'YTDLP_IP_FAMILY': 'auto'}
-        self.assertNotIn('--force-ipv4', downloader.options(360))
-        downloader.env = {}
-        self.assertIn('--force-ipv4', downloader.options(360))
-
     def test_missing_ffmpeg_fails_before_download(self):
         from unittest.mock import patch
 
