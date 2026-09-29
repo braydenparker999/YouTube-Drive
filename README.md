@@ -76,7 +76,7 @@ Open [Actions → YouTube → Drive archive](https://github.com/braydenparker999
 
 - `urls`: one URL, multiple URLs separated by whitespace/newlines, or a JSON array of URL strings.
 - `destination`: `Requested` by default; one folder name under the root.
-- `max_quality`: `1080` by default; choices 360/480/720/1080/1440/2160.
+- `max_quality`: `480` by default; choices 360/480/720/1080/1440/2160.
 - `request_id`: optional correlation label, e.g. `jarvis-1234` (no personal/private content).
 
 Leave `urls` blank to check configured creators and retry eligible pending work. A URL with playlist parameters archives just that video's canonical ID. Playlist-only URLs, non-YouTube hosts, HTTP URLs, path traversal, and malformed values are rejected. Maximum 25 manual URLs per invocation.
@@ -95,7 +95,7 @@ Scheduled layout:
 - `YouTube Archive/Creator Two/2026/...`
 - `YouTube Archive/Requested/...` for manual requests (no year subfolder).
 
-MP4 is preferred when the selected codecs permit it; MKV/WebM are allowed without lossy re-encoding. Maximum quality is a ceiling, not a promise that YouTube exposes that resolution.
+MP4 is preferred when the selected codecs permit it; MKV/WebM are allowed without lossy re-encoding. The default is the best available video at or below 480p, with audio. Maximum quality is a ceiling, not a promise that YouTube exposes that resolution; lower-resolution sources are not upscaled.
 
 Default safety/runner limits in the configuration: 25 new/retry videos per run, 4 GiB per finished file, 2 hours per video, a 210-minute budget for starting work, and at most 5 failed automatic attempts per video. After 5 failures, automatic retries pause; resolve the cause and manually resubmit the URL to retry it. One video at a time; 5–10 second download pacing; bounded extraction, fragment, upload and API retries. The workflow has a 6-hour hard limit. Runner disk is checked before each download; temporary media is removed after successful upload/checkpoint and also cleaned up when a failed job ends. Adjust settings within the validated bounds for your creators. An 8 GiB setting needs more free runner disk than the usual free hosted runner may provide because merging needs working space.
 
@@ -133,7 +133,7 @@ Jarvis can later POST to GitHub's authenticated endpoint:
   "inputs": {
     "urls": "[\"https://www.youtube.com/watch?v=BaW_jenozKc\"]",
     "destination": "Requested",
-    "max_quality": "1080",
+    "max_quality": "480",
     "request_id": "jarvis-1234"
   }
 }

@@ -34,7 +34,7 @@ class InputsTests(unittest.TestCase):
         for raw in [url + '\n' + url, json.dumps([url, url])]:
             parsed = parse_inputs({'INPUT_URLS': raw, 'INPUT_REQUEST_ID': 'jarvis-1234'})
             self.assertEqual(parsed.ids, [VID])
-            self.assertEqual((parsed.destination, parsed.max_quality), ('Requested', 1080))
+            self.assertEqual((parsed.destination, parsed.max_quality), ('Requested', 480))
 
     def test_input_rejections(self):
         for env in [{'INPUT_URLS': '[bad'}, {'INPUT_URLS': '[42]'}, {'INPUT_URLS': 'x' * 30001},
@@ -66,7 +66,7 @@ class InputsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'config.yml'
             path.write_text(f'channels:\n  - name: Creator\n    channel_id: {CID}\n')
-            self.assertEqual(load_config(path)['settings']['max_quality'], 1080)
+            self.assertEqual(load_config(path)['settings']['max_quality'], 480)
             path.write_text('channels:\n  - name: Creator\n    channel_id: @handle\n')
             with self.assertRaises(SetupError):
                 load_config(path)

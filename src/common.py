@@ -107,7 +107,7 @@ def parse_inputs(env):
     if req and not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", req):
         raise SetupError("request_id must be 1–80 letters, digits, dots, underscores, or hyphens.")
     return Inputs(ids, destination_name(env.get("INPUT_DESTINATION") or "Requested"),
-                  quality(env.get("INPUT_MAX_QUALITY") or "1080"), req)
+                  quality(env.get("INPUT_MAX_QUALITY") or "480"), req)
 
 
 def safe_filename(title, vid, published, extension):

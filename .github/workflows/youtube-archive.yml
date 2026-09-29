@@ -19,7 +19,7 @@ on:
         description: 'Maximum video height (manual requests only)'
         type: choice
         options: ['360', '480', '720', '1080', '1440', '2160']
-        default: '1080'
+        default: '480'
       request_id:
         description: 'Optional correlation ID for future Jarvis integration'
         type: string

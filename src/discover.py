@@ -27,7 +27,7 @@ def load_config(path):
         if not isinstance(config, dict) or not isinstance(config.get("channels"), list):
             raise ValueError
         options = config.get("settings", {})
-        defaults = {"max_quality": 1080, "max_videos_per_run": 25, "max_file_gib": 4,
+        defaults = {"max_quality": 480, "max_videos_per_run": 25, "max_file_gib": 4,
                     "max_duration_seconds": 7200, "run_budget_minutes": 210, "max_attempts": 5}
         if not isinstance(options, dict) or set(options) - set(defaults):
             raise ValueError
