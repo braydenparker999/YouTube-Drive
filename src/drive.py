@@ -92,7 +92,7 @@ class Drive:
         try:
             root = self.get(self.root)
         except HttpError as exc:
-            if exc.status not in {401, 403}:
+            if transient(exc.status, exc.code) or exc.status not in {401, 403}:
                 raise
             raise SetupError(f"Configured Drive root could not be inspected (HTTP {exc.status}); check existing account and folder access.",
                              code="root_access_required", invalid_fields=["GDRIVE_ROOT_FOLDER_ID"],

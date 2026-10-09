@@ -86,6 +86,49 @@ class ReadinessTests(unittest.TestCase):
         self.assertNotIn("canary", str(ctx.exception))
         self.assertEqual(http.call_count, 4)
 
+    @patch("src.drive.backoff")
+    def test_exhausted_drive_rate_limits_remain_retryable_and_do_not_blame_root_access(self, sleep):
+        for reason in ("rateLimitExceeded", "userRateLimitExceeded"):
+            with self.subTest(reason=reason):
+                state = State()
+                before = copy.deepcopy(state.data)
+                drive = Drive(ENV, state)
+                body = json.dumps({"error": {"errors": [{"reason": reason}]}}).encode()
+                sleep.reset_mock()
+                with patch.object(drive, "raw", return_value=(403, {}, body)) as http:
+                    with self.assertRaises(HttpError) as ctx:
+                        drive.preflight(record_root=False)
+                self.assertEqual((ctx.exception.status, ctx.exception.code), (403, reason))
+                self.assertEqual(http.call_count, 5)
+                self.assertEqual(sleep.call_count, 4)
+                self.assertEqual(state.data, before)
+                with (patch("src.state.GitHubState", return_value=state),
+                      patch("src.drive.Drive", return_value=drive),
+                      patch.object(drive, "raw", return_value=(403, {}, body))):
+                    report, code = readiness(ENV, CONFIG, online=True)
+                self.assertEqual((code, report["status"]), (1, "blocked"))
+                self.assertEqual(report["invalid_fields"], [])
+                self.assertEqual(report["code"], "readiness_check_failed")
+                self.assertIn(reason, report["error"])
+                self.assertEqual(state.data, before)
+
+    @patch("src.drive.backoff")
+    def test_true_drive_authorization_errors_report_existing_root_access(self, sleep):
+        for status, reason in ((401, ""), (403, "insufficientPermissions")):
+            with self.subTest(status=status, reason=reason):
+                state = State()
+                before = copy.deepcopy(state.data)
+                drive = Drive(ENV, state)
+                body = json.dumps({"error": {"errors": [{"reason": reason}]}}).encode()
+                with patch.object(drive, "raw", return_value=(status, {}, body)) as http:
+                    with self.assertRaises(SetupError) as ctx:
+                        drive.preflight(record_root=False)
+                self.assertEqual(ctx.exception.details["code"], "root_access_required")
+                self.assertEqual(ctx.exception.details["invalid_fields"], ["GDRIVE_ROOT_FOLDER_ID"])
+                self.assertEqual(http.call_count, 1)
+                sleep.assert_not_called()
+                self.assertEqual(state.data, before)
+
     @patch("src.drive.raw_http")
     def test_malformed_oauth_response_is_sanitized(self, http):
         http.return_value = (200, {}, b'{"access_token":"private-canary","expires_in":"bad"}')

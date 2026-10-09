@@ -19,6 +19,12 @@ from src.state import empty_state
 VID = "abcdefghijk"
 CID = "UC" + "a" * 22
 MEDIA = b"deterministic fixture bytes; no real YouTube or Drive access"
+FEED = f'''<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <yt:channelId>{CID}</yt:channelId><entry>
+    <yt:videoId>{VID}</yt:videoId><yt:channelId>{CID}</yt:channelId>
+    <title>Fixture feed overlap</title><published>2026-10-01T00:00:00Z</published>
+  </entry>
+</feed>'''.encode()
 ENV = {"GDRIVE_CLIENT_ID": "fixture-client", "GDRIVE_CLIENT_SECRET": "fixture-secret",
        "GDRIVE_REFRESH_TOKEN": "fixture-refresh", "GDRIVE_ROOT_FOLDER_ID": "fixture_root_id",
        "GITHUB_TOKEN": "fixture-github", "GITHUB_REPOSITORY": "owner/repo",
@@ -36,6 +42,7 @@ class Fixture:
         self.downloads = 0
         self.extracts = 0
         self.uploads = 0
+        self.feed_reads = 0
         self.session = None
         self.fail_completion = False
 
@@ -59,6 +66,11 @@ class Fixture:
             return self.response({"content": {"sha": self.sha}})
         if parsed.hostname == "oauth2.googleapis.com":
             return self.response({"access_token": "fixture-access", "expires_in": 3600})
+        if parsed.hostname == "www.youtube.com":
+            assert method == "GET" and parsed.path == "/feeds/videos.xml"
+            assert parse_qs(parsed.query) == {"channel_id": [CID]}
+            self.feed_reads += 1
+            return 200, {}, FEED
         if parsed.path.endswith("/generateIds"):
             self.ids += 1
             return self.response({"ids": [f"fixture_file_{self.ids:04}"]})
@@ -118,6 +130,7 @@ class ArchiveFixtureTests(unittest.TestCase):
 
     def run_archive(self, env):
         with (patch("src.state.raw_http", self.fixture.http), patch("src.drive.raw_http", self.fixture.http),
+              patch("src.discover.raw_http", self.fixture.http),
               patch("src.main.Downloader", self.fixture.downloader), patch("src.main.time.sleep"),
               contextlib.redirect_stdout(io.StringIO())):
             code = main([], env)
@@ -132,8 +145,14 @@ class ArchiveFixtureTests(unittest.TestCase):
         self.assertEqual((code, duplicate["skipped"]), (0, 1))
         self.assertEqual(duplicate["videos"][0]["drive_file_id"], first["videos"][0]["drive_file_id"])
         self.assertEqual(before, (self.fixture.downloads, self.fixture.extracts, self.fixture.uploads, self.fixture.ids))
+        archived = copy.deepcopy(self.fixture.state["videos"][VID])
+        Path("config/channels.yml").write_text(f"channels:\n  - name: Fixture\n    channel_id: {CID}\n    enabled: true\n")
         code, daily = self.run_archive({**ENV, "GITHUB_EVENT_NAME": "schedule"})
         self.assertEqual((code, daily["successful"]), (0, 0))
+        self.assertEqual(daily["discovery_errors"], [])
+        self.assertEqual(self.fixture.feed_reads, 1, "the enabled feed must actually rediscover the archived video")
+        self.assertEqual(self.fixture.state["videos"][VID], archived)
+        self.assertEqual(before, (self.fixture.downloads, self.fixture.extracts, self.fixture.uploads, self.fixture.ids))
         self.assertEqual(self.fixture.uploads, 1)
         self.assertEqual(self.fixture.state["videos"][VID]["youtube_date_source"], "yt-dlp.upload_date")
 
