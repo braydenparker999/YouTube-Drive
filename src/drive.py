@@ -8,7 +8,7 @@ from urllib.parse import urlencode, urlsplit
 from .common import DRIVE_ID, ArchiveError, HttpError, SetupError, backoff, error_code, raw_http, transient
 
 BASE = "https://www.googleapis.com/drive/v3"
-FIELDS = "id,name,mimeType,size,md5Checksum,trashed,parents,appProperties,capabilities(canAddChildren)"
+FIELDS = "id,name,mimeType,size,md5Checksum,trashed,parents,appProperties,ownedByMe,driveId,capabilities(canAddChildren)"
 FOLDER = "application/vnd.google-apps.folder"
 
 
@@ -31,13 +31,26 @@ class Drive:
             except HttpError as exc:
                 status, body = exc.status, b""
             if status == 200:
-                obj = json.loads(body)
-                self.access_token = obj["access_token"]
-                self.expires_at = time.monotonic() + int(obj.get("expires_in", 3600)) - 120
+                try:
+                    obj = json.loads(body)
+                    token = obj["access_token"]
+                    expires = int(obj.get("expires_in", 3600))
+                    if not isinstance(token, str) or not token or expires <= 120:
+                        raise ValueError
+                except (ValueError, TypeError, KeyError):
+                    raise SetupError("Google OAuth returned an unusable token response; no response contents were logged.",
+                                     code="oauth_response_invalid", owner_actions=["Owner: inspect existing Google client authorization before retrying."]) from None
+                self.access_token = token
+                self.expires_at = time.monotonic() + expires - 120
                 return
             code = error_code(body)
             if not transient(status, code) or attempt == 3:
-                raise SetupError(f"Google OAuth refresh failed (HTTP {status}, {code or 'authorization_error'}). Reauthorize with your own production OAuth client; see README.")
+                if transient(status, code):
+                    raise HttpError(status, code)
+                fields = ("GDRIVE_REFRESH_TOKEN",) if code == "invalid_grant" else ("GDRIVE_CLIENT_ID", "GDRIVE_CLIENT_SECRET")
+                raise SetupError(f"Google OAuth refresh failed (HTTP {status}, {code or 'authorization_error'}). Review existing production authorization; see README.",
+                                 code="oauth_authorization_required", invalid_fields=fields,
+                                 owner_actions=["Owner: verify the matching existing OAuth client and production refresh token. Reauthorization requires separate approval."])
             backoff(attempt + 1)
 
     def raw(self, method, url, headers=None, body=None):
@@ -75,15 +88,28 @@ class Drive:
     def new_id(self):
         return self.api("GET", "/files/generateIds?count=1&space=drive&type=files")["ids"][0]
 
-    def preflight(self):
-        root = self.get(self.root)
-        if not root or root.get("trashed") or root.get("mimeType") != FOLDER or not root.get("capabilities", {}).get("canAddChildren"):
-            raise SetupError("GDRIVE_ROOT_FOLDER_ID must identify a writable My Drive folder owned by your Google account.")
+    def preflight(self, *, record_root=True):
+        try:
+            root = self.get(self.root)
+        except HttpError as exc:
+            if exc.status not in {401, 403}:
+                raise
+            raise SetupError(f"Configured Drive root could not be inspected (HTTP {exc.status}); check existing account and folder access.",
+                             code="root_access_required", invalid_fields=["GDRIVE_ROOT_FOLDER_ID"],
+                             owner_actions=["Owner: verify that the existing OAuth account owns the configured My Drive folder."]) from None
+        if (not root or root.get("trashed") or root.get("mimeType") != FOLDER or root.get("driveId") or
+                root.get("ownedByMe") is not True or not root.get("capabilities", {}).get("canAddChildren")):
+            raise SetupError("GDRIVE_ROOT_FOLDER_ID must identify a writable My Drive folder owned by your Google account.",
+                             code="root_folder_invalid", invalid_fields=["GDRIVE_ROOT_FOLDER_ID"],
+                             owner_actions=["Owner: verify the folder ID, ownership, My Drive location and writable capability without changing sharing settings."])
         fingerprint = hashlib.sha256(self.root.encode()).hexdigest()
         previous = self.state.data.get("root_fingerprint")
         if previous and fingerprint != previous:
-            raise SetupError("Drive root changed. Keep the existing root or deliberately migrate state before changing it.")
-        self.state.data["root_fingerprint"] = fingerprint
+            raise SetupError("Drive root changed. Keep the existing root or deliberately migrate state before changing it.",
+                             code="root_state_conflict", invalid_fields=["GDRIVE_ROOT_FOLDER_ID"],
+                             owner_actions=["Owner: restore the existing root configuration or review a separate state migration. Do not reset archive state."])
+        if record_root:
+            self.state.data["root_fingerprint"] = fingerprint
 
     def folder(self, parent, name, existing_id=None):
         if existing_id:

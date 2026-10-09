@@ -50,6 +50,25 @@ No cookies or YouTube API key are configured. The tested WARP egress is the defa
 
 ### 4. Configure creators
 
+Before authorizing a test, `python -m src.main --readiness` produces
+`readiness-summary.json` with exact missing/invalid field names and owner actions,
+without printing configuration values or contacting Google. With **existing
+authorized configuration**, `python -m src.main --readiness --online` additionally
+reads archive state and inspects folder ownership, My Drive location, writable
+capability and the existing root fingerprint. It never saves state, generates
+IDs, creates folders, installs a downloader or uploads. A passing online check
+means `ready_for_authorized_test`; checkpoint write access, the first upload and
+the duplicate request remain explicitly `not_checked`. It does not establish
+that setup or end-to-end acceptance is complete. Refreshing an existing OAuth
+token is supported; issuing credentials or accepting new consent is not part
+of this command. This report is separate from `run-summary.json`.
+
+Archive setup failures now include a structured `setup` object in the existing
+run summary: `code`, `missing_fields`, `invalid_fields` and `owner_actions`.
+OAuth upstream outages remain retryable failures and do not instruct the owner
+to reauthorize. Review the specific reported configuration/access problem
+before changing anything.
+
 Edit only [`config/channels.yml`](config/channels.yml). Replace `channels: []` with entries like this, substituting actual stable IDs:
 
 ```yaml

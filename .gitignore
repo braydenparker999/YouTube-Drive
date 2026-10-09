@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 run-summary.json
+readiness-summary.json
 metadata-smoke.json
 .env
 .env.*

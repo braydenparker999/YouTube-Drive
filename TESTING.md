@@ -81,3 +81,22 @@ The final proof is manual-only and uses the same runtime installer and downloade
 No additional YouTube account or proxy credential is required for the tested default. The remaining external blocker for the first real Drive test is Google authorization/root configuration.
 
 First end-to-end acceptance: one short authorized public video uploads, Drive size/MD5/YouTube ID verify, state becomes complete, and rerunning the URL returns exactly the same Drive ID with `skipped: true`. Repeat using an enabled creator for scheduled-mode discovery, then confirm the next daily invocation. Those real acceptance checks must happen after the external prerequisites are ready.
+
+## Readiness and offline protocol fixtures
+
+`tests/test_readiness.py` checks exact missing/invalid fields, secret redaction,
+read-only operation, folder ownership/location, root-state conflicts, sanitized
+OAuth failures and explicit upload-date provenance. `tests/test_archive_fixture.py`
+exercises the real main pipeline, GitHub checkpoint protocol and Drive upload
+protocol against deterministic in-memory endpoints and synthetic media bytes.
+It covers manual → duplicate → daily reuse, daily → manual reuse, and recovery
+after an upload succeeds but the completion checkpoint fails. Assertions verify
+durable ID reservations precede creation/upload and retries make no second
+transfer. These are offline engineering checks; they do not replace the
+authorized Google upload/duplicate acceptance described above.
+
+New state records include `youtube_upload_date` only when a valid yt-dlp
+`upload_date` exists, with `youtube_date_source: "yt-dlp.upload_date"`. RSS
+publication times and extraction timestamps never supply that field. This
+allows a metadata-only My Media planner to use explicit provenance without
+treating historical `published_at` values as proof of an original upload date.

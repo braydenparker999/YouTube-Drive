@@ -179,11 +179,16 @@ class Downloader:
     def public_fields(info):
         date = info.get("upload_date", "")
         try:
+            if not isinstance(date, str) or not re.fullmatch(r"\d{8}", date):
+                raise ValueError
             published = datetime.strptime(date, "%Y%m%d").date().isoformat()
+            if not "2005-01-01" <= published < "2200-01-01":
+                raise ValueError
         except (ValueError, TypeError):
             published = None
         return {"title": str(info.get("title") or info["id"])[:500], "channel_id": info.get("channel_id"),
-                "published_at": published}
+                "published_at": published,
+                **({"youtube_upload_date": published, "youtube_date_source": "yt-dlp.upload_date"} if published else {})}
 
     def download(self, vid, height, info, directory):
         require_media_tools()
