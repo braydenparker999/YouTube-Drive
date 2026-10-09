@@ -18,7 +18,10 @@ class ArchiveError(Exception):
 
 
 class SetupError(ArchiveError):
-    pass
+    def __init__(self, message, *, code="setup_required", missing_fields=(), invalid_fields=(), owner_actions=()):
+        super().__init__(message)
+        self.details = {"code": code, "missing_fields": list(missing_fields),
+                        "invalid_fields": list(invalid_fields), "owner_actions": list(owner_actions)}
 
 
 class StateError(ArchiveError):

@@ -7,26 +7,26 @@ import tempfile
 import time
 from pathlib import Path
 
-from .common import DRIVE_ID, ArchiveError, SetupError, StateError, log, parse_inputs, safe_filename
+from .common import ArchiveError, SetupError, StateError, log, parse_inputs, safe_filename
 from .discover import discover, load_config
 from .downloader import Downloader
 from .drive import Drive
+from .readiness import check_configuration, readiness
 from .state import GitHubState, now, save_local
-
-REQUIRED = ("GDRIVE_CLIENT_ID", "GDRIVE_CLIENT_SECRET", "GDRIVE_REFRESH_TOKEN", "GDRIVE_ROOT_FOLDER_ID")
 
 
 def check_setup(env):
-    missing = [key for key in REQUIRED if not env.get(key, "").strip()]
+    check_configuration(env)
+    missing = [k for k in ("GITHUB_TOKEN", "GITHUB_REPOSITORY") if not env.get(k)]
     if missing:
-        raise SetupError("Missing repository secrets: " + ", ".join(missing) + ". Complete README 'One-time setup' before running the archive.")
-    if not DRIVE_ID.fullmatch(env["GDRIVE_ROOT_FOLDER_ID"]):
-        raise SetupError("GDRIVE_ROOT_FOLDER_ID must be the folder ID, not a URL.")
-    if not env.get("GITHUB_TOKEN") or not env.get("GITHUB_REPOSITORY"):
-        raise SetupError("Run through GitHub Actions: its automatic GITHUB_TOKEN needs contents:write.")
+        raise SetupError("Run through GitHub Actions: its automatic GITHUB_TOKEN needs contents:write.",
+                         code="archive_context_required", missing_fields=missing,
+                         owner_actions=["Owner: use the existing authorized Actions workflow; do not create a separate personal token."])
     branch = env.get("ARCHIVE_BRANCH", "main")
     if env.get("GITHUB_REF") != "refs/heads/" + branch or env.get("GITHUB_EVENT_NAME") not in {"schedule", "workflow_dispatch"}:
-        raise SetupError("Archive writes are allowed only for schedule/workflow_dispatch on the default branch.")
+        raise SetupError("Archive writes are allowed only for schedule/workflow_dispatch on the default branch.",
+                         code="archive_context_rejected", invalid_fields=["GITHUB_REF", "GITHUB_EVENT_NAME"],
+                         owner_actions=["Owner: review the branch, then run an authorized archive request from the existing default-branch workflow."])
 
 
 def checksum(path):
@@ -173,9 +173,24 @@ def finish_summary(summary):
 def main(argv=None, env=None):
     env = os.environ if env is None else env
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check-setup", action="store_true")
-    parser.add_argument("--metadata-only", metavar="YOUTUBE_URL")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check-setup", action="store_true")
+    mode.add_argument("--readiness", action="store_true", help="Write a separate, credential-free readiness report; never archive.")
+    mode.add_argument("--metadata-only", metavar="YOUTUBE_URL")
+    parser.add_argument("--online", action="store_true", help="With --readiness only: inspect existing authorization, root and state without writes.")
     args = parser.parse_args(argv)
+    if args.online and not args.readiness:
+        parser.error("--online requires --readiness")
+    if args.readiness:
+        try:
+            report, code = readiness(env, load_config("config/channels.yml"), online=args.online)
+        except ArchiveError as exc:
+            report, code = {"version": 1, "status": "fatal", "error": str(exc)}, 1
+        except Exception as exc:
+            report, code = {"version": 1, "status": "fatal", "error": "Read-only readiness failed (" + type(exc).__name__ + ")."}, 1
+        save_local("readiness-summary.json", report)
+        log("READINESS", **report)
+        return code
     summary = {"request_id": "", "status": "running", "videos": [], "discovery_errors": []}
     code = 0
     write_summary = True
@@ -212,8 +227,8 @@ def main(argv=None, env=None):
         else:
             log("DISCOVERY", queued=0, message="No pending videos; add enabled creators or supply manual URLs.")
     except SetupError as exc:
-        summary.update(status="setup_required", error=str(exc))
-        log("SETUP", error=str(exc))
+        summary.update(status="setup_required", error=str(exc), setup=exc.details)
+        log("SETUP", error=str(exc), **exc.details)
         code = 2
     except KeyboardInterrupt:
         summary.update(status="interrupted", error="Run interrupted; durable checkpoints will be recovered on the next run.")
@@ -232,6 +247,10 @@ def main(argv=None, env=None):
             with open(env["GITHUB_STEP_SUMMARY"], "a") as handle:
                 handle.write("## YouTube archive\n\nStatus: " + summary["status"] + "\n\n")
                 handle.write(" | ".join(f"{k}: {summary[k]}" for k in ["successful", "skipped", "failed", "deferred"]) + "\n")
+                if summary.get("setup"):
+                    fields = summary["setup"]["missing_fields"] + summary["setup"]["invalid_fields"]
+                    # Field names are internal constants, never credential values.
+                    handle.write("\nSetup fields: " + ", ".join(fields) + "\n")
     return code or (1 if summary["status"] == "partial" else 0)
 
 
